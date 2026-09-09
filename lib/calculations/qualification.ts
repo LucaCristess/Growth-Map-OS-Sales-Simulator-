@@ -57,8 +57,8 @@ export function calculateQualification(answers: Record<string, AnswerValue>): Qu
   const yearsScore = scoreMetric(years, BENCHMARKS.years);
   factors.push({ metric: 'years', value: years, weight: WEIGHTS.years, contribution: yearsScore * WEIGHTS.years });
 
-  // Total score (0-100)
-  const totalScore = Math.round(factors.reduce((sum, f) => sum + f.contribution, 0) * 100);
+  // Total score (0-100), clamped to prevent floating point overflow
+  const totalScore = Math.min(Math.round(factors.reduce((sum, f) => sum + f.contribution, 0) * 100), 100);
 
   // Tier assignment
   const tier = assignTier(totalScore);

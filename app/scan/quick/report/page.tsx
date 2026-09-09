@@ -57,7 +57,9 @@ export default function ReportPage() {
     );
   }
 
-  const revenueGrowth = ((scenarios.expected - scenarios.current) / scenarios.current * 100).toFixed(0);
+  const revenueGrowth = scenarios.current > 0
+    ? ((scenarios.expected - scenarios.current) / scenarios.current * 100).toFixed(0)
+    : 'N/A';
 
   return (
     <main className="min-h-screen px-6 py-20">
@@ -112,7 +114,7 @@ export default function ReportPage() {
           <div className="space-y-6">
             {/* Show Rate */}
             <RoadmapItem
-              current={answers.show_rate as number}
+              current={Number(answers.show_rate ?? 0)}
               target={80}
               label="Show Rate"
               description="Getting more booked calls to actually attend"
@@ -120,7 +122,7 @@ export default function ReportPage() {
 
             {/* Close Rate */}
             <RoadmapItem
-              current={answers.close_rate as number}
+              current={Number(answers.close_rate ?? 0)}
               target={30}
               label="Close Rate"
               description="Converting more attendees into customers"
@@ -128,8 +130,8 @@ export default function ReportPage() {
 
             {/* Volume */}
             <VolumeItem
-              current={answers.booked_calls as number}
-              target={Math.round((answers.booked_calls as number) * 1.5)}
+              current={Number(answers.booked_calls ?? 0)}
+              target={Math.round(Number(answers.booked_calls ?? 0) * 1.5)}
               label="Booking Volume"
               description="Increasing the number of calls you book"
             />
@@ -143,15 +145,30 @@ export default function ReportPage() {
           <p className="text-text-secondary text-sm mb-4">{constraint.description}</p>
           <div className="bg-background rounded-lg p-4">
             <p className="text-text-muted text-sm">
-              {constraint.metric === 'show_rate' && 'Improving your show rate from ' +
-                `${answers.show_rate}% to 80% would add ` +
-                `$${Math.round((0.8 - (answers.show_rate as number) / 100) * (answers.booked_calls as number) * (answers.close_rate as number) / 100 * (answers.aov as number)).toLocaleString()}/month.`}
-              {constraint.metric === 'close_rate' && 'Improving your close rate from ' +
-                `${answers.close_rate}% to 30% would add ` +
-                `$${Math.round(((answers.booked_calls as number) * (answers.show_rate as number) / 100 * (0.3 - (answers.close_rate as number) / 100) * (answers.aov as number))).toLocaleString()}/month.`}
-              {constraint.metric === 'volume' && 'Doubling your booking volume from ' +
-                `${answers.booked_calls} to ${(answers.booked_calls as number) * 2} would add ` +
-                `$${Math.round((answers.booked_calls as number) * (answers.show_rate as number) / 100 * (answers.close_rate as number) / 100 * (answers.aov as number)).toLocaleString()}/month.`}
+              {constraint.metric === 'show_rate' && (() => {
+                const sr = Number(answers.show_rate ?? 0);
+                const bc = Number(answers.booked_calls ?? 0);
+                const cr = Number(answers.close_rate ?? 0);
+                const aov = Number(answers.aov ?? 0);
+                const impact = Math.round((0.8 - sr / 100) * bc * cr / 100 * aov);
+                return `Improving your show rate from ${sr}% to 80% would add $${impact.toLocaleString()}/month.`;
+              })()}
+              {constraint.metric === 'close_rate' && (() => {
+                const sr = Number(answers.show_rate ?? 0);
+                const bc = Number(answers.booked_calls ?? 0);
+                const cr = Number(answers.close_rate ?? 0);
+                const aov = Number(answers.aov ?? 0);
+                const impact = Math.round(bc * sr / 100 * (0.3 - cr / 100) * aov);
+                return `Improving your close rate from ${cr}% to 30% would add $${impact.toLocaleString()}/month.`;
+              })()}
+              {constraint.metric === 'volume' && (() => {
+                const sr = Number(answers.show_rate ?? 0);
+                const bc = Number(answers.booked_calls ?? 0);
+                const cr = Number(answers.close_rate ?? 0);
+                const aov = Number(answers.aov ?? 0);
+                const impact = Math.round(bc * sr / 100 * cr / 100 * aov);
+                return `Doubling your booking volume from ${bc} to ${bc * 2} would add $${impact.toLocaleString()}/month.`;
+              })()}
             </p>
           </div>
         </div>

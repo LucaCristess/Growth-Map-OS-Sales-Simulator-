@@ -18,8 +18,23 @@ export function Wizard({ sections, answers, onAnswer, onComplete, scanType = 'qu
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
 
+  if (!sections.length) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="text-text-muted">No questions available.</p>
+      </main>
+    );
+  }
+
   const currentSection = sections[currentIndex];
-  const currentQuestion = currentSection.questions[0];
+  const currentQuestion = currentSection?.questions[0];
+  if (!currentQuestion) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="text-text-muted">Missing question configuration.</p>
+      </main>
+    );
+  }
   const currentValue = answers[currentQuestion.key] ?? null;
   const isLastQuestion = currentIndex === sections.length - 1;
 

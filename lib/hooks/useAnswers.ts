@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AnswerValue } from '@/types';
 
 interface AnswerMap {
@@ -21,12 +21,14 @@ function getStoredAnswers(): AnswerMap {
 }
 
 function storeAnswers(answers: AnswerMap) {
+  if (typeof window === 'undefined') return;
   localStorage.setItem(ANSWERS_KEY, JSON.stringify(answers));
 }
 
 export function useAnswers(sessionId: string | null) {
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   // Load answers from localStorage on mount
   useEffect(() => {
@@ -34,12 +36,16 @@ export function useAnswers(sessionId: string | null) {
   }, []);
 
   const setAnswer = useCallback(async (key: string, value: AnswerValue) => {
-    const newAnswers = { ...answers, [key]: value };
-    setAnswers(newAnswers);
-    storeAnswers(newAnswers);
+    // Use functional updater to always read latest state
+    setAnswers(prev => {
+      const newAnswers = { ...prev, [key]: value };
+      storeAnswers(newAnswers);
+      return newAnswers;
+    });
 
     // Persist to Supabase if we have a session
-    if (sessionId) {
+    if (sessionId && !savingRef.current) {
+      savingRef.current = true;
       setSaving(true);
       try {
         await fetch('/api/answers', {
@@ -52,12 +58,13 @@ export function useAnswers(sessionId: string | null) {
           }),
         });
       } catch (err) {
-        console.error('Failed to persist answer:', err);
+        // Silently fail — localStorage has the data
       } finally {
         setSaving(false);
+        savingRef.current = false;
       }
     }
-  }, [answers, sessionId]);
+  }, [sessionId]);
 
   const getAnswer = useCallback((key: string): AnswerValue => {
     return answers[key] ?? null;

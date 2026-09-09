@@ -19,7 +19,7 @@ function formatCurrency(value: number): string {
 }
 
 function parseCurrencyInput(raw: string): number | null {
-  const cleaned = raw.replace(/[^0-9.]/g, '');
+  const cleaned = raw.replace(/[^0-9.]/g, '').replace(/(\d+\.\d*)\./g, '$1');
   if (cleaned === '') return null;
   const num = parseFloat(cleaned);
   return isNaN(num) ? null : num;
@@ -39,18 +39,19 @@ export function WizardQuestion({
   const [showUnknown, setShowUnknown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize input from existing value
+  // Reset state when question changes
   useEffect(() => {
-    if (value !== null && value !== undefined && !showUnknown) {
+    setShowUnknown(false);
+    if (value !== null && value !== undefined) {
       if (question.type === 'currency') {
         setInputValue(formatCurrency(value as number));
       } else {
         setInputValue(String(value));
       }
-    } else if (showUnknown) {
+    } else {
       setInputValue('');
     }
-  }, [value, question.type, showUnknown]);
+  }, [question.key, question.type, value]);
 
   // Auto-focus input
   useEffect(() => {
@@ -71,18 +72,18 @@ export function WizardQuestion({
         onChange(parsed);
       }
     } else if (question.type === 'percentage') {
-      // Allow only numbers and decimal
-      const cleaned = raw.replace(/[^0-9.]/g, '');
+      // Allow only numbers and single decimal
+      const cleaned = raw.replace(/[^0-9.]/g, '').replace(/(\d+\.\d*)\./g, '$1');
       setInputValue(cleaned);
       const num = parseFloat(cleaned);
       if (!isNaN(num) && num >= 0 && num <= 100) {
         onChange(num);
       }
     } else {
-      // Plain number
-      const cleaned = raw.replace(/[^0-9.]/g, '');
+      // Plain number — no decimals allowed
+      const cleaned = raw.replace(/[^0-9]/g, '');
       setInputValue(cleaned);
-      const num = parseFloat(cleaned);
+      const num = parseInt(cleaned, 10);
       if (!isNaN(num) && num >= 0) {
         onChange(num);
       }
