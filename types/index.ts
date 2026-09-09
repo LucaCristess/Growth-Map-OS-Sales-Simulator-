@@ -126,6 +126,9 @@ export interface Question {
   options?: { label: string; value: string }[];
   required: boolean;
   help_text?: string;
+  min?: number;
+  max?: number;
+  unknown_option?: boolean;
 }
 
 export interface QuestionSection {

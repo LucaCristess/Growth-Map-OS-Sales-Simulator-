@@ -1,31 +1,62 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+import { useSession } from '@/lib/hooks/useSession';
+import { useAnswers } from '@/lib/hooks/useAnswers';
+import { Wizard } from '@/components/wizard/Wizard';
+import { DEEP_SCAN_SECTIONS } from '@/lib/config/questions';
 import Link from 'next/link';
 
 export default function DeepScanPage() {
-  return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6">
-      <div className="max-w-2xl mx-auto text-center">
-        <Link
-          href="/scan"
-          className="text-text-muted hover:text-text text-sm mb-12 inline-block transition-colors"
-        >
-          Back to scan selection
-        </Link>
+  const router = useRouter();
+  const { session, loading: sessionLoading } = useSession();
+  const { answers, setAnswer, saving } = useAnswers(session?.id ?? null);
 
-        <h1 className="font-display text-4xl md:text-5xl text-text mb-4">
-          Deep Scan
-        </h1>
-        <p className="text-text-secondary text-lg mb-12">
-          ~5-8 minutes. Full diagnostic and complete revenue analysis.
-        </p>
+  const handleComplete = () => {
+    if (session) {
+      fetch('/api/sessions/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: session.id }),
+      });
+    }
+    router.push('/scan/deep/results');
+  };
 
-        <div className="bg-surface border border-border rounded-xl p-8 text-left">
-          <p className="text-text-muted text-center">
-            Questions coming in Brick 3...
+  if (sessionLoading) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center px-6">
+        <div className="text-text-muted">Loading...</div>
+      </main>
+    );
+  }
+
+  if (!session && !sessionLoading) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center px-6">
+        <div className="text-center max-w-md">
+          <h1 className="font-display text-3xl text-text mb-4">Start fresh</h1>
+          <p className="text-text-secondary mb-8">
+            Let&apos;s begin your Deep Scan.
           </p>
+          <Link
+            href="/scan"
+            className="bg-brand hover:bg-brand-hover text-background font-medium px-6 py-3 rounded-lg transition-all duration-200"
+          >
+            Choose Your Scan
+          </Link>
         </div>
-      </div>
-    </main>
+      </main>
+    );
+  }
+
+  return (
+    <Wizard
+      sections={DEEP_SCAN_SECTIONS}
+      answers={answers}
+      onAnswer={setAnswer}
+      onComplete={handleComplete}
+      loading={saving}
+    />
   );
 }
