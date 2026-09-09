@@ -10,6 +10,7 @@ interface WizardQuestionProps {
   onNext: () => void;
   sectionTitle: string;
   sectionDescription: string;
+  isLast?: boolean;
   loading?: boolean;
 }
 
@@ -31,6 +32,7 @@ export function WizardQuestion({
   onNext,
   sectionTitle,
   sectionDescription,
+  isLast = false,
   loading,
 }: WizardQuestionProps) {
   const [inputValue, setInputValue] = useState('');
@@ -186,7 +188,7 @@ export function WizardQuestion({
             disabled={!hasValue || loading}
             className="mt-4 w-full bg-brand hover:bg-brand-hover text-background font-medium py-3 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {loading ? 'Saving...' : 'Next'}
+            {loading ? 'Saving...' : isLast ? 'See Results' : 'Next'}
           </button>
 
           {/* Unknown link */}

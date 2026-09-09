@@ -56,6 +56,7 @@ export default function DeepScanPage() {
       answers={answers}
       onAnswer={setAnswer}
       onComplete={handleComplete}
+      scanType="deep"
       loading={saving}
     />
   );

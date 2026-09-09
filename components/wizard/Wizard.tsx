@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { WizardQuestion } from './WizardQuestion';
+import { analytics } from '@/lib/analytics';
 import type { QuestionSection, AnswerValue } from '@/types';
 
 interface WizardProps {
@@ -9,16 +10,18 @@ interface WizardProps {
   answers: Record<string, AnswerValue>;
   onAnswer: (key: string, value: AnswerValue) => void;
   onComplete: () => void;
+  scanType?: 'quick' | 'deep';
   loading?: boolean;
 }
 
-export function Wizard({ sections, answers, onAnswer, onComplete, loading }: WizardProps) {
+export function Wizard({ sections, answers, onAnswer, onComplete, scanType = 'quick', loading }: WizardProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
 
   const currentSection = sections[currentIndex];
-  const currentQuestion = currentSection.questions[0]; // One question per section
+  const currentQuestion = currentSection.questions[0];
   const currentValue = answers[currentQuestion.key] ?? null;
+  const isLastQuestion = currentIndex === sections.length - 1;
 
   const progress = ((currentIndex + 1) / sections.length) * 100;
 
@@ -27,20 +30,23 @@ export function Wizard({ sections, answers, onAnswer, onComplete, loading }: Wiz
       setDirection('forward');
       setCurrentIndex(prev => prev + 1);
     } else {
+      analytics.wizardCompleted(scanType);
       onComplete();
     }
-  }, [currentIndex, sections.length, onComplete]);
+  }, [currentIndex, sections.length, onComplete, scanType]);
 
   const handleBack = useCallback(() => {
     if (currentIndex > 0) {
+      analytics.wizardBackClicked(currentQuestion.key, currentIndex);
       setDirection('backward');
       setCurrentIndex(prev => prev - 1);
     }
-  }, [currentIndex]);
+  }, [currentIndex, currentQuestion.key]);
 
   const handleAnswer = useCallback((value: AnswerValue) => {
     onAnswer(currentQuestion.key, value);
-  }, [currentQuestion.key, onAnswer]);
+    analytics.wizardQuestionAnswered(currentQuestion.key, value, currentIndex);
+  }, [currentQuestion.key, onAnswer, currentIndex]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && currentValue !== null && currentValue !== '') {
@@ -87,6 +93,7 @@ export function Wizard({ sections, answers, onAnswer, onComplete, loading }: Wiz
               onNext={handleNext}
               sectionTitle={currentSection.title}
               sectionDescription={currentSection.description ?? ''}
+              isLast={isLastQuestion}
               loading={loading}
             />
           </div>

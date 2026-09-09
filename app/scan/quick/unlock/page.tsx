@@ -1,17 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/hooks/useSession';
+import { useAnswers } from '@/lib/hooks/useAnswers';
+import { calculateQualification } from '@/lib/calculations/qualification';
+import { analytics } from '@/lib/analytics';
 
 export default function UnlockPage() {
   const router = useRouter();
   const { session } = useSession();
+  const { answers } = useAnswers(session?.id ?? null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [qualification, setQualification] = useState<ReturnType<typeof calculateQualification> | null>(null);
+
+  useEffect(() => {
+    if (Object.keys(answers).length > 0) {
+      const qual = calculateQualification(answers);
+      setQualification(qual);
+    }
+  }, [answers]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +49,8 @@ export default function UnlockPage() {
           session_id: session?.id,
           name: name.trim(),
           email: email.trim().toLowerCase(),
+          qualification_score: qualification?.score ?? null,
+          qualification_tier: qualification?.tier ?? null,
         }),
       });
 
@@ -46,14 +60,16 @@ export default function UnlockPage() {
         throw new Error(data.error || 'Failed to save your information');
       }
 
+      analytics.leadSubmitted('quick');
       setSuccess(true);
 
-      // Redirect to full report after a brief moment
       setTimeout(() => {
         router.push('/scan/quick/report');
       }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const errorMsg = err instanceof Error ? err.message : 'Something went wrong';
+      analytics.leadSubmissionFailed('quick', errorMsg);
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -79,22 +95,14 @@ export default function UnlockPage() {
     <main className="min-h-screen flex flex-col items-center justify-center px-6 py-20">
       <div className="max-w-md w-full mx-auto">
         <div className="text-center mb-10">
-          <span className="text-brand text-sm font-medium tracking-wider uppercase">
-            Unlock Your Report
-          </span>
-          <h1 className="font-display text-3xl md:text-4xl text-text mt-4 mb-4">
-            See your full simulation
-          </h1>
-          <p className="text-text-secondary text-sm">
-            Target scenarios, improvement roadmap, and exactly what to fix first.
-          </p>
+          <span className="text-brand text-sm font-medium tracking-wider uppercase">Unlock Your Report</span>
+          <h1 className="font-display text-3xl md:text-4xl text-text mt-4 mb-4">See your full simulation</h1>
+          <p className="text-text-secondary text-sm">Target scenarios, improvement roadmap, and exactly what to fix first.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-xl p-8">
           <div className="mb-6">
-            <label htmlFor="name" className="block text-text text-sm font-medium mb-2">
-              Your name
-            </label>
+            <label htmlFor="name" className="block text-text text-sm font-medium mb-2">Your name</label>
             <input
               id="name"
               type="text"
@@ -106,9 +114,7 @@ export default function UnlockPage() {
           </div>
 
           <div className="mb-6">
-            <label htmlFor="email" className="block text-text text-sm font-medium mb-2">
-              Email address
-            </label>
+            <label htmlFor="email" className="block text-text text-sm font-medium mb-2">Email address</label>
             <input
               id="email"
               type="email"
@@ -119,9 +125,7 @@ export default function UnlockPage() {
             />
           </div>
 
-          {error && (
-            <p className="text-red-400 text-sm mb-4">{error}</p>
-          )}
+          {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
           <button
             type="submit"
@@ -131,9 +135,7 @@ export default function UnlockPage() {
             {loading ? 'Saving...' : 'Get My Full Report'}
           </button>
 
-          <p className="text-text-muted text-xs text-center mt-4">
-            We&apos;ll send your report to this email. No spam, ever.
-          </p>
+          <p className="text-text-muted text-xs text-center mt-4">We&apos;ll send your report to this email. No spam, ever.</p>
         </form>
       </div>
     </main>

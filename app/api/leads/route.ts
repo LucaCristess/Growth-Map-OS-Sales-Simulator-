@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { session_id, name, email, phone } = body;
+    const { session_id, name, email, phone, qualification_score, qualification_tier } = body;
 
     if (!session_id || !name || !email) {
       return NextResponse.json(
@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
           name: name.trim(),
           email: email.trim().toLowerCase(),
           phone: phone || null,
+          qualification_score: qualification_score ?? null,
+          qualification_tier: qualification_tier ?? null,
         })
         .eq('id', existing.id);
 
@@ -59,6 +61,8 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         phone: phone || null,
+        qualification_score: qualification_score ?? null,
+        qualification_tier: qualification_tier ?? null,
       })
       .select('id')
       .single();

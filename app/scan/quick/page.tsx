@@ -62,6 +62,7 @@ export default function QuickScanPage() {
       answers={answers}
       onAnswer={setAnswer}
       onComplete={handleComplete}
+      scanType="quick"
       loading={saving}
     />
   );
