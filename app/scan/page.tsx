@@ -96,7 +96,7 @@ export default function ScanPage() {
               Booked calls, show rate, close rate, ownership, revenue, AOV, target.
             </p>
             <div className="text-brand text-sm group-hover:translate-x-1 transition-transform">
-              Start Quick Scan →
+              Start Quick Scan &rarr;
             </div>
           </Link>
 
@@ -115,7 +115,7 @@ export default function ScanPage() {
               Raw counts, leads/month, team size, niche, years in business.
             </p>
             <div className="text-brand text-sm group-hover:translate-x-1 transition-transform">
-              Start Deep Scan →
+              Start Deep Scan &rarr;
             </div>
           </Link>
         </div>

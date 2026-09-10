@@ -33,15 +33,13 @@ export function WizardQuestion({
   sectionTitle,
   sectionDescription,
   isLast = false,
-  loading,
+  loading = false,
 }: WizardQuestionProps) {
   const [inputValue, setInputValue] = useState('');
-  const [showUnknown, setShowUnknown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Reset state when question changes
+  // Sync input value when question changes or value changes externally
   useEffect(() => {
-    setShowUnknown(false);
     if (value !== null && value !== undefined) {
       if (question.type === 'currency') {
         setInputValue(formatCurrency(value as number));
@@ -53,7 +51,7 @@ export function WizardQuestion({
     }
   }, [question.key, question.type, value]);
 
-  // Auto-focus input
+  // Auto-focus input on desktop
   useEffect(() => {
     if (question.type !== 'select' && inputRef.current) {
       inputRef.current.focus();
@@ -64,7 +62,6 @@ export function WizardQuestion({
     const raw = e.target.value;
 
     if (question.type === 'currency') {
-      // Allow only numbers and commas
       const cleaned = raw.replace(/[^0-9,]/g, '');
       setInputValue(cleaned);
       const parsed = parseCurrencyInput(cleaned);
@@ -72,7 +69,6 @@ export function WizardQuestion({
         onChange(parsed);
       }
     } else if (question.type === 'percentage') {
-      // Allow only numbers and single decimal
       const cleaned = raw.replace(/[^0-9.]/g, '').replace(/(\d+\.\d*)\./g, '$1');
       setInputValue(cleaned);
       const num = parseFloat(cleaned);
@@ -80,7 +76,6 @@ export function WizardQuestion({
         onChange(num);
       }
     } else {
-      // Plain number — no decimals allowed
       const cleaned = raw.replace(/[^0-9]/g, '');
       setInputValue(cleaned);
       const num = parseInt(cleaned, 10);
@@ -92,20 +87,22 @@ export function WizardQuestion({
 
   const handleSelectOption = (optionValue: string) => {
     onChange(optionValue);
-    // Auto-advance for select questions
-    setTimeout(() => onNext(), 200);
+    setTimeout(() => onNext(), 150);
   };
 
   const handleUnknown = () => {
-    setShowUnknown(true);
     onChange(null);
-  };
-
-  const handleClearUnknown = () => {
-    setShowUnknown(false);
+    onNext();
   };
 
   const hasValue = value !== null && value !== undefined && value !== '';
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (hasValue && !loading) {
+      onNext();
+    }
+  };
 
   return (
     <div className="text-center">
@@ -130,6 +127,7 @@ export function WizardQuestion({
           {question.options?.map((option) => (
             <button
               key={option.value}
+              type="button"
               onClick={() => handleSelectOption(option.value)}
               className={`w-full px-6 py-4 rounded-lg border text-left transition-all duration-200 ${
                 value === option.value
@@ -141,20 +139,8 @@ export function WizardQuestion({
             </button>
           ))}
         </div>
-      ) : showUnknown ? (
-        <div className="max-w-sm mx-auto">
-          <p className="text-text-muted text-sm mb-4">
-            No problem — we&apos;ll work with what you have.
-          </p>
-          <button
-            onClick={handleClearUnknown}
-            className="text-brand text-sm hover:underline"
-          >
-            I know this — let me enter it
-          </button>
-        </div>
       ) : (
-        <div className="max-w-sm mx-auto">
+        <form onSubmit={handleSubmit} className="max-w-sm mx-auto">
           <div className="relative">
             {/* Prefix */}
             {question.prefix && (
@@ -185,7 +171,7 @@ export function WizardQuestion({
 
           {/* Next button */}
           <button
-            onClick={onNext}
+            type="submit"
             disabled={!hasValue || loading}
             className="mt-4 w-full bg-brand hover:bg-brand-hover text-background font-medium py-3 rounded-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
           >
@@ -195,17 +181,18 @@ export function WizardQuestion({
           {/* Unknown link */}
           {question.unknown_option && (
             <button
+              type="button"
               onClick={handleUnknown}
-              className="mt-4 text-text-muted text-sm hover:text-text transition-colors"
+              className="mt-4 text-text-muted text-sm hover:text-text transition-colors block w-full text-center"
             >
               I don&apos;t know this
             </button>
           )}
-        </div>
+        </form>
       )}
 
       {/* Help text */}
-      {question.help_text && !showUnknown && (
+      {question.help_text && (
         <p className="text-text-muted text-xs mt-6 max-w-sm mx-auto">
           {question.help_text}
         </p>
