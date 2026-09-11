@@ -13,6 +13,7 @@ export default function DeepUnlockPage() {
   const { answers } = useAnswers(session?.id ?? null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -49,6 +50,7 @@ export default function DeepUnlockPage() {
           session_id: session?.id,
           name: name.trim(),
           email: email.trim().toLowerCase(),
+          phone: phone.trim() || undefined,
           qualification_score: qualification?.score ?? null,
           qualification_tier: qualification?.tier ?? null,
         }),
@@ -131,6 +133,20 @@ export default function DeepUnlockPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="jane@example.com"
+              className="w-full bg-background border border-border rounded-lg text-text px-4 py-3 focus:border-brand focus:outline-none transition-colors"
+            />
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="phone" className="block text-text text-sm font-medium mb-2">
+              Phone <span className="text-text-muted">(optional)</span>
+            </label>
+            <input
+              id="phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 (555) 123-4567"
               className="w-full bg-background border border-border rounded-lg text-text px-4 py-3 focus:border-brand focus:outline-none transition-colors"
             />
           </div>

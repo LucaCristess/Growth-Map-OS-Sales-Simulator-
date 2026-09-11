@@ -12,10 +12,11 @@ export interface RevenueResult {
 const BENCHMARKS = {
   show_rate: 80,
   close_rate: 30,
+  aov: 2000,
+  booking_rate: 1,
 };
 
 function deriveRates(answers: Record<string, AnswerValue>): { showRate: number; closeRate: number } {
-  // Deep scan provides raw counts; derive percentages if percentages are missing
   const showRate = Number(answers.show_rate) || 0;
   const closeRate = Number(answers.close_rate) || 0;
 
@@ -54,34 +55,45 @@ export function calculateRevenue(answers: Record<string, AnswerValue>): RevenueR
 export function calculatePrimaryConstraint(answers: Record<string, AnswerValue>): { primary: Constraint; secondary: Constraint | null; scores: ConstraintScore[] } | null {
   const { showRate, closeRate } = deriveRates(answers);
   const booked = Number(answers.booked_calls) || 0;
+  const aov = Number(answers.aov) || 0;
+  const monthlyLeads = Number(answers.monthly_leads) || 0;
 
   const showGap = BENCHMARKS.show_rate - showRate;
   const closeGap = BENCHMARKS.close_rate - closeRate;
   const volumeScore = booked < 20 ? 20 - booked : 0;
+  const aovGap = aov > 0 ? Math.max(0, (BENCHMARKS.aov - aov) / BENCHMARKS.aov * 100) : 50;
+  const bookingRate = monthlyLeads > 0 ? (booked / monthlyLeads) * 100 : 0;
+  const bookingGap = monthlyLeads > 0 ? Math.max(0, 100 - bookingRate) : 0;
 
   const scores: ConstraintScore[] = [
     { metric: 'show_rate', score: Math.max(showGap, 0), rank: 0 },
     { metric: 'close_rate', score: Math.max(closeGap, 0), rank: 0 },
     { metric: 'volume', score: volumeScore, rank: 0 },
+    { metric: 'aov', score: aovGap, rank: 0 },
+    { metric: 'booking_rate', score: bookingGap, rank: 0 },
   ];
 
   scores.sort((a, b) => b.score - a.score);
   scores.forEach((s, i) => { s.rank = i + 1; });
 
   const toConstraint = (s: ConstraintScore): Constraint => {
-    const current = s.metric === 'show_rate' ? showRate : s.metric === 'close_rate' ? closeRate : booked;
-    const benchmark = s.metric === 'show_rate' ? BENCHMARKS.show_rate : s.metric === 'close_rate' ? BENCHMARKS.close_rate : 20;
-
-    const labels: Record<string, string> = {
-      show_rate: 'Show Rate',
-      close_rate: 'Close Rate',
-      volume: 'Booking Volume',
-    };
+    const current = s.metric === 'show_rate' ? showRate
+      : s.metric === 'close_rate' ? closeRate
+      : s.metric === 'aov' ? aov
+      : s.metric === 'booking_rate' ? bookingRate
+      : booked;
+    const benchmark = s.metric === 'show_rate' ? BENCHMARKS.show_rate
+      : s.metric === 'close_rate' ? BENCHMARKS.close_rate
+      : s.metric === 'aov' ? BENCHMARKS.aov
+      : s.metric === 'booking_rate' ? BENCHMARKS.booking_rate
+      : 20;
 
     const impacts: Record<string, string> = {
       show_rate: `${Math.abs(showGap).toFixed(0)}% ${showGap > 0 ? 'below' : 'above'} the ${BENCHMARKS.show_rate}% target`,
       close_rate: `${Math.abs(closeGap).toFixed(0)}% ${closeGap > 0 ? 'below' : 'above'} the ${BENCHMARKS.close_rate}% target`,
       volume: booked < 20 ? 'Low call volume limits revenue ceiling' : 'Booking volume is healthy',
+      aov: `Current AOV is $${aov.toLocaleString()}, benchmark is $${BENCHMARKS.aov.toLocaleString()}`,
+      booking_rate: monthlyLeads > 0 ? `Booking rate is ${bookingRate.toFixed(0)}% of leads` : 'Lead data needed to assess booking rate',
     };
 
     return {
@@ -153,7 +165,6 @@ export function calculateScenarios(answers: Record<string, AnswerValue>): Scenar
     },
   ];
 
-  // Set revenue_change as percentage from current
   const currentRev = scenarios[0].projected_revenue;
   scenarios.forEach((s) => {
     s.revenue_change = currentRev > 0 ? ((s.projected_revenue - currentRev) / currentRev) * 100 : 0;
@@ -188,9 +199,6 @@ export function calculateTargetAnalysis(answers: Record<string, AnswerValue>): T
     };
   }
 
-  const gap = targetRevenue - currentRevenue;
-
-  // Path 1: Volume Only — keep rates, increase calls
   const volumeNeeded = aov > 0 && showRate > 0 && closeRate > 0
     ? Math.ceil(targetRevenue / (aov * (showRate / 100) * (closeRate / 100)))
     : booked * 3;
@@ -205,7 +213,6 @@ export function calculateTargetAnalysis(answers: Record<string, AnswerValue>): T
     projected_revenue: volumeNeeded * (showRate / 100) * (closeRate / 100) * aov,
   };
 
-  // Path 2: Conversion First — improve show + close rates, keep volume
   const neededCloseRate = booked > 0 && showRate > 0 && aov > 0
     ? Math.min((targetRevenue / (booked * (showRate / 100) * aov)) * 100, 100)
     : Math.min(closeRate + 20, 100);
@@ -220,7 +227,6 @@ export function calculateTargetAnalysis(answers: Record<string, AnswerValue>): T
     projected_revenue: booked * (Math.min(showRate + 10, 100) / 100) * (Math.min(neededCloseRate, 100) / 100) * aov,
   };
 
-  // Path 3: Balanced — split the gap across volume + conversion + AOV
   const balancedBooked = Math.round(booked * 1.2);
   const balancedShow = Math.min(showRate + 5, 100);
   const balancedClose = Math.min(closeRate + 5, 100);
@@ -236,7 +242,6 @@ export function calculateTargetAnalysis(answers: Record<string, AnswerValue>): T
     projected_revenue: balancedBooked * (balancedShow / 100) * (balancedClose / 100) * balancedAov,
   };
 
-  // Recommended: whichever path reaches target with fewest total changes
   const paths = [volumeOnly, conversionFirst, balanced];
   const recommended = paths.reduce((best, p) => {
     const bestGap = Math.abs(best.projected_revenue - targetRevenue);

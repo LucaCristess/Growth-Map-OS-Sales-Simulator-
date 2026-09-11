@@ -12,13 +12,18 @@ export const analytics = {
     posthog.capture('session_resumed', { session_id: sessionId, scan_type: scanType, answered_count: answeredCount });
   },
 
+  // Scan selection
+  scanTypeSelected: (scanType: string) => {
+    posthog.capture('scan_type_selected', { scan_type: scanType });
+  },
+
   // Wizard events
   wizardStarted: (scanType: string) => {
     posthog.capture('wizard_started', { scan_type: scanType });
   },
 
   wizardQuestionAnswered: (questionKey: string, value: string | number | boolean | null, questionIndex: number) => {
-    posthog.capture('wizard_question_answered', {
+    posthog.capture('question_answered', {
       question_key: questionKey,
       value_type: typeof value,
       is_unknown: value === null,
@@ -53,13 +58,29 @@ export const analytics = {
   },
 
   // Report events
-  reportViewed: (scanType: string, revenueCurrent: number, revenueExpected: number) => {
-    posthog.capture('report_viewed', {
+  reportViewed: (scanType: string, revenueCurrent: number, revenueTarget: number) => {
+    posthog.capture('full_report_viewed', {
       scan_type: scanType,
       revenue_current: revenueCurrent,
-      revenue_expected: revenueExpected,
-      revenue_uplift: revenueExpected - revenueCurrent,
+      revenue_target: revenueTarget,
     });
+  },
+
+  // Simulator events
+  simulationAdjusted: (metric: string, newValue: number) => {
+    posthog.capture('simulation_adjusted', { metric, new_value: newValue });
+  },
+
+  scenarioSelected: (scenarioName: string, projectedRevenue: number) => {
+    posthog.capture('scenario_selected', {
+      scenario_name: scenarioName,
+      projected_revenue: projectedRevenue,
+    });
+  },
+
+  // Audit CTA
+  auditCtaClicked: (scanType: string) => {
+    posthog.capture('audit_cta_clicked', { scan_type: scanType });
   },
 
   // Page views

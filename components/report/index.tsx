@@ -127,6 +127,8 @@ export function ConstraintSection({
     const showRate = Number(answers.show_rate) || 0;
     const closeRate = Number(answers.close_rate) || 0;
     const aov = Number(answers.aov) || 0;
+    const monthlyLeads = Number(answers.monthly_leads) || 0;
+    const bookingRate = monthlyLeads > 0 ? (booked / monthlyLeads) * 100 : 0;
 
     if (metric === 'show_rate') {
       const impact = Math.round((0.8 - showRate / 100) * booked * (closeRate / 100) * aov);
@@ -140,6 +142,13 @@ export function ConstraintSection({
       const impact = Math.round(booked * (showRate / 100) * (closeRate / 100) * aov);
       return `Doubling volume from ${booked} to ${booked * 2} would add $${impact.toLocaleString()}/month.`;
     }
+    if (metric === 'aov') {
+      const impact = Math.round(booked * (showRate / 100) * (closeRate / 100) * (2000 - aov));
+      return `Increasing AOV from $${aov.toLocaleString()} to $2,000 would add $${Math.max(impact, 0).toLocaleString()}/month.`;
+    }
+    if (metric === 'booking_rate') {
+      return `Your booking rate is ${bookingRate.toFixed(0)}% of leads. Improving lead-to-booking conversion increases volume.`;
+    }
     return '';
   };
 
@@ -147,6 +156,8 @@ export function ConstraintSection({
     show_rate: 'Show Rate',
     close_rate: 'Close Rate',
     volume: 'Booking Volume',
+    aov: 'Average Order Value',
+    booking_rate: 'Booking Rate',
   };
 
   return (

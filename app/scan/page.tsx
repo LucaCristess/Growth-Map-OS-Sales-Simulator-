@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession } from '@/lib/hooks/useSession';
 import { useAnswers } from '@/lib/hooks/useAnswers';
+import { analytics } from '@/lib/analytics';
 
 export default function ScanPage() {
   const { session, loading: sessionLoading } = useSession();
@@ -14,7 +15,6 @@ export default function ScanPage() {
   useEffect(() => {
     if (!answersLoading && Object.keys(answers).length > 0) {
       setHasExistingScan(true);
-      // Determine scan type from answers
       if (answers.show_count !== undefined || answers.monthly_leads !== undefined) {
         setScanType('deep');
       } else {
@@ -34,7 +34,6 @@ export default function ScanPage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 py-20">
       <div className="max-w-2xl w-full mx-auto">
-        {/* Resume prompt */}
         {hasExistingScan && scanType && (
           <div className="bg-surface border border-brand/20 rounded-xl p-8 mb-10 text-center">
             <span className="text-brand text-sm font-medium tracking-wider uppercase">
@@ -67,7 +66,6 @@ export default function ScanPage() {
           </div>
         )}
 
-        {/* Scan selection */}
         <div className="text-center mb-12">
           <span className="text-brand text-sm font-medium tracking-wider uppercase">
             Choose Your Scan
@@ -81,9 +79,9 @@ export default function ScanPage() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Quick Scan */}
           <Link
             href="/scan/quick"
+            onClick={() => analytics.scanTypeSelected('quick')}
             className="group bg-surface border border-border rounded-xl p-8 hover:border-brand transition-all duration-300"
           >
             <div className="text-brand text-sm font-medium tracking-wider uppercase mb-3">
@@ -100,9 +98,9 @@ export default function ScanPage() {
             </div>
           </Link>
 
-          {/* Deep Scan */}
           <Link
             href="/scan/deep"
+            onClick={() => analytics.scanTypeSelected('deep')}
             className="group bg-surface border border-border rounded-xl p-8 hover:border-brand transition-all duration-300"
           >
             <div className="text-brand text-sm font-medium tracking-wider uppercase mb-3">

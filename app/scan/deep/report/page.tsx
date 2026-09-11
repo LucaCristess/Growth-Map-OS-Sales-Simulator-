@@ -195,10 +195,21 @@ export default function DeepReportPage() {
         {/* Interactive simulator */}
         <Simulator initialAnswers={answers} onRecalculate={handleSimulatorRecalc} />
 
-        <div className="text-center">
-          <Link href="/" className="text-text-muted text-sm hover:text-text transition-colors">
-            &larr; Back to start
-          </Link>
+        <div className="text-center space-y-4">
+          <a
+            href="https://calendly.com/growthmap/audit"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => analytics.auditCtaClicked('deep')}
+            className="inline-block bg-brand hover:bg-brand-hover text-background font-medium px-8 py-3 rounded-lg transition-all duration-200"
+          >
+            Book a Free Audit
+          </a>
+          <div>
+            <Link href="/" className="text-text-muted text-sm hover:text-text transition-colors">
+              &larr; Back to start
+            </Link>
+          </div>
         </div>
       </div>
     </main>

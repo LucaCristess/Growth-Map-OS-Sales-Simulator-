@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { calculateRevenue, calculateScenarios } from '@/lib/calculations/revenue';
-import type { AnswerValue } from '@/types';
+import { analytics } from '@/lib/analytics';
+import type { AnswerValue, Scenario } from '@/types';
 
 interface SimulatorState {
   booked_calls: number;
@@ -57,6 +58,21 @@ export function Simulator({
   const revenue = useMemo(() => calculateRevenue(derivedAnswers), [derivedAnswers]);
   const scenarios = useMemo(() => calculateScenarios(derivedAnswers), [derivedAnswers]);
 
+  const handleSliderChange = useCallback((metric: string, value: number) => {
+    analytics.simulationAdjusted(metric, value);
+  }, []);
+
+  const handleScenarioClick = useCallback((scenario: Scenario) => {
+    analytics.scenarioSelected(scenario.name, scenario.projected_revenue);
+    setCloseRate(scenario.close_rate);
+    setShowRate(scenario.show_rate);
+    setState({
+      booked_calls: scenario.qualified_leads,
+      aov: scenario.aov,
+      revenue_target: state.revenue_target,
+    });
+  }, [state.revenue_target]);
+
   const targetGap = state.revenue_target > 0
     ? state.revenue_target - revenue.projected_revenue
     : 0;
@@ -103,7 +119,7 @@ export function Simulator({
           min={0}
           max={200}
           step={1}
-          onChange={(v) => setState((s) => ({ ...s, booked_calls: v }))}
+          onChange={(v) => { setState((s) => ({ ...s, booked_calls: v })); handleSliderChange('booked_calls', v); }}
           formatValue={(v) => String(v)}
         />
         <Slider
@@ -112,7 +128,7 @@ export function Simulator({
           min={0}
           max={100}
           step={1}
-          onChange={setShowRate}
+          onChange={(v) => { setShowRate(v); handleSliderChange('show_rate', v); }}
           formatValue={(v) => `${v.toFixed(0)}%`}
         />
         <Slider
@@ -121,7 +137,7 @@ export function Simulator({
           min={0}
           max={100}
           step={1}
-          onChange={setCloseRate}
+          onChange={(v) => { setCloseRate(v); handleSliderChange('close_rate', v); }}
           formatValue={(v) => `${v.toFixed(0)}%`}
         />
         <Slider
@@ -130,7 +146,7 @@ export function Simulator({
           min={0}
           max={50000}
           step={100}
-          onChange={(v) => setState((s) => ({ ...s, aov: v }))}
+          onChange={(v) => { setState((s) => ({ ...s, aov: v })); handleSliderChange('aov', v); }}
           formatValue={(v) => `$${v.toLocaleString()}`}
         />
         <Slider
@@ -139,16 +155,19 @@ export function Simulator({
           min={0}
           max={100000}
           step={1000}
-          onChange={(v) => setState((s) => ({ ...s, revenue_target: v }))}
+          onChange={(v) => { setState((s) => ({ ...s, revenue_target: v })); handleSliderChange('revenue_target', v); }}
           formatValue={(v) => `$${v.toLocaleString()}`}
         />
       </div>
 
+      {/* Clickable scenario presets */}
       <div className="grid grid-cols-4 gap-3">
         {scenarios.map((s) => (
-          <div
+          <button
             key={s.name}
-            className={`text-center p-3 rounded-lg border text-xs ${
+            type="button"
+            onClick={() => handleScenarioClick(s)}
+            className={`text-center p-3 rounded-lg border text-xs transition-all hover:border-brand cursor-pointer ${
               s.name === 'current' ? 'bg-surface border-text-muted' : 'bg-surface border-border'
             }`}
           >
@@ -161,7 +180,7 @@ export function Simulator({
                 {s.revenue_change > 0 ? '+' : ''}{s.revenue_change.toFixed(0)}%
               </div>
             )}
-          </div>
+          </button>
         ))}
       </div>
 

@@ -1,28 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import { CreateLeadSchema } from '@/lib/validation';
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+  const rl = checkRateLimit(ip, 'POST /api/leads', 10, 60_000);
+  const rlHeaders = getRateLimitHeaders(rl);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: rlHeaders });
+  }
+
   try {
     const body = await request.json();
-    const { session_id, name, email, phone, qualification_score, qualification_tier } = body;
+    const parsed = CreateLeadSchema.safeParse(body);
 
-    if (!session_id || !name || !email) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'session_id, name, and email are required' },
-        { status: 400 }
+        { error: parsed.error.issues[0].message },
+        { status: 400, headers: rlHeaders }
       );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: 'Invalid email format' },
-        { status: 400 }
-      );
-    }
+    const { session_id, name, email, phone, qualification_score, qualification_tier } = parsed.data;
 
-    // Check if lead already exists for this session
     const { data: existing } = await supabaseAdmin
       .from('leads')
       .select('id')
@@ -30,7 +31,6 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existing) {
-      // Update existing lead
       const { error } = await supabaseAdmin
         .from('leads')
         .update({
@@ -44,16 +44,12 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         console.error('Lead update error:', error);
-        return NextResponse.json(
-          { error: 'Failed to update lead' },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: 'Failed to update lead' }, { status: 500, headers: rlHeaders });
       }
 
-      return NextResponse.json({ success: true, lead_id: existing.id });
+      return NextResponse.json({ success: true, lead_id: existing.id }, { headers: rlHeaders });
     }
 
-    // Insert new lead
     const { data, error } = await supabaseAdmin
       .from('leads')
       .insert({
@@ -69,18 +65,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Lead insert error:', error);
-      return NextResponse.json(
-        { error: 'Failed to save lead' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to save lead' }, { status: 500, headers: rlHeaders });
     }
 
-    return NextResponse.json({ success: true, lead_id: data.id });
+    return NextResponse.json({ success: true, lead_id: data.id }, { headers: rlHeaders });
   } catch (err) {
     console.error('Lead API error:', err);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500, headers: rlHeaders });
   }
 }
