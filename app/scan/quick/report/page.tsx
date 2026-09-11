@@ -1,36 +1,67 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
 import { useSession } from '@/lib/hooks/useSession';
 import { useAnswers } from '@/lib/hooks/useAnswers';
-import {
-  calculateRevenue,
-  calculatePrimaryConstraint,
-  calculateScenarios,
-  type RevenueResult,
-  type ConstraintResult,
-} from '@/lib/calculations/revenue';
+import { calculateRevenue, calculatePrimaryConstraint, calculateScenarios, calculateTargetAnalysis } from '@/lib/calculations/revenue';
+import { calculateQualification } from '@/lib/calculations/qualification';
+import { analytics } from '@/lib/analytics';
+import { ScenarioCard, RoadmapItem, ConstraintSection, TargetSection } from '@/components/report';
+import { Simulator } from '@/components/report/Simulator';
 import Link from 'next/link';
+import type { RevenueResult, Scenario, ConstraintAnalysis, TargetAnalysis, QualificationResult, AnswerValue } from '@/types';
 
 export default function ReportPage() {
-  const router = useRouter();
   const { session, loading: sessionLoading } = useSession();
   const { answers, saving: answersLoading } = useAnswers(session?.id ?? null);
   const [result, setResult] = useState<RevenueResult | null>(null);
-  const [constraint, setConstraint] = useState<ConstraintResult | null>(null);
-  const [scenarios, setScenarios] = useState<ReturnType<typeof calculateScenarios> | null>(null);
+  const [constraint, setConstraint] = useState<ConstraintAnalysis | null>(null);
+  const [scenarios, setScenarios] = useState<Scenario[] | null>(null);
+  const [target, setTarget] = useState<TargetAnalysis | null>(null);
+  const [qualification, setQualification] = useState<QualificationResult | null>(null);
+  const [reportSaved, setReportSaved] = useState(false);
+
+  const compute = useCallback((ans: Record<string, AnswerValue>) => {
+    const rev = calculateRevenue(ans);
+    const con = calculatePrimaryConstraint(ans);
+    const scen = calculateScenarios(ans);
+    const tgt = calculateTargetAnalysis(ans);
+    const qual = calculateQualification(ans);
+    setResult(rev);
+    setConstraint(con);
+    setScenarios(scen);
+    setTarget(tgt);
+    setQualification(qual);
+    return { rev, con, scen, tgt, qual };
+  }, []);
 
   useEffect(() => {
     if (Object.keys(answers).length > 0) {
-      const rev = calculateRevenue(answers);
-      const con = calculatePrimaryConstraint(answers);
-      const scen = calculateScenarios(answers);
-      setResult(rev);
-      setConstraint(con);
-      setScenarios(scen);
+      const computed = compute(answers);
+      analytics.reportViewed('quick', Number(answers.monthly_revenue) || 0, Number(answers.revenue_target) || 0);
+
+      // Persist report to database
+      if (session?.id && !reportSaved) {
+        setReportSaved(true);
+        const reportData = {
+          current: computed.rev,
+          scenarios: computed.scen,
+          constraint: computed.con,
+          target: computed.tgt,
+          qualification: computed.qual,
+        };
+        fetch('/api/reports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: session.id, result_json: reportData }),
+        }).catch(() => {});
+      }
     }
-  }, [answers]);
+  }, [answers, compute, session?.id, reportSaved]);
+
+  const handleSimulatorRecalc = useCallback((newAnswers: Record<string, AnswerValue>) => {
+    compute(newAnswers);
+  }, [compute]);
 
   if (sessionLoading || answersLoading) {
     return (
@@ -57,8 +88,10 @@ export default function ReportPage() {
     );
   }
 
-  const revenueGrowth = scenarios.current > 0
-    ? ((scenarios.expected - scenarios.current) / scenarios.current * 100).toFixed(0)
+  const currentScenario = scenarios[0];
+  const expectedScenario = scenarios.find((s) => s.name === 'expected');
+  const revenueGrowth = currentScenario.projected_revenue > 0 && expectedScenario
+    ? ((expectedScenario.projected_revenue - currentScenario.projected_revenue) / currentScenario.projected_revenue * 100).toFixed(0)
     : 'N/A';
 
   return (
@@ -70,7 +103,7 @@ export default function ReportPage() {
             Full Report
           </span>
           <h1 className="font-display text-4xl md:text-5xl text-text mt-4 mb-4">
-            ${Math.round(scenarios.current).toLocaleString()}
+            ${Math.round(currentScenario.projected_revenue).toLocaleString()}
             <span className="text-text-secondary text-2xl block mt-2">current monthly revenue</span>
           </h1>
           <p className="text-text-muted text-sm">
@@ -82,96 +115,59 @@ export default function ReportPage() {
         <div className="bg-surface border border-border rounded-xl p-8 mb-8">
           <h2 className="text-text font-medium text-lg mb-6">Revenue Scenarios</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <ScenarioCard
-              label="Current"
-              value={scenarios.current}
-              subtitle="Where you are now"
-              active
-            />
-            <ScenarioCard
-              label="Conservative"
-              value={scenarios.conservative}
-              subtitle="Fix close rate"
-            />
-            <ScenarioCard
-              label="Expected"
-              value={scenarios.expected}
-              subtitle="Balanced improvement"
-              highlight
-            />
-            <ScenarioCard
-              label="Aggressive"
-              value={scenarios.aggressive}
-              subtitle="Full optimization"
-            />
+            {scenarios.map((s) => (
+              <ScenarioCard
+                key={s.name}
+                label={s.label}
+                value={s.projected_revenue}
+                subtitle={
+                  s.name === 'current' ? 'Where you are now' :
+                  s.name === 'conservative' ? 'Fix close rate' :
+                  s.name === 'expected' ? 'Balanced improvement' :
+                  'Full optimization'
+                }
+                active={s.name === 'current'}
+                highlight={s.name === 'expected'}
+                change={s.revenue_change}
+              />
+            ))}
           </div>
         </div>
 
         {/* Improvement roadmap */}
         <div className="bg-surface border border-border rounded-xl p-8 mb-8">
           <h2 className="text-text font-medium text-lg mb-6">Improvement Roadmap</h2>
-
           <div className="space-y-6">
-            {/* Show Rate */}
             <RoadmapItem
-              current={Number(answers.show_rate ?? 0)}
+              current={result.show_rate}
               target={80}
               label="Show Rate"
               description="Getting more booked calls to actually attend"
             />
-
-            {/* Close Rate */}
             <RoadmapItem
-              current={Number(answers.close_rate ?? 0)}
+              current={result.close_rate}
               target={30}
               label="Close Rate"
               description="Converting more attendees into customers"
             />
-
-            {/* Volume */}
-            <VolumeItem
+            <RoadmapItem
               current={Number(answers.booked_calls ?? 0)}
               target={Math.round(Number(answers.booked_calls ?? 0) * 1.5)}
               label="Booking Volume"
               description="Increasing the number of calls you book"
+              isPercentage={false}
             />
           </div>
         </div>
 
-        {/* Primary constraint */}
-        <div className="bg-surface border border-brand/20 rounded-xl p-8 mb-8">
-          <h2 className="text-text font-medium text-lg mb-2">What to Fix First</h2>
-          <p className="text-brand text-2xl font-display mb-2">{constraint.label}</p>
-          <p className="text-text-secondary text-sm mb-4">{constraint.description}</p>
-          <div className="bg-background rounded-lg p-4">
-            <p className="text-text-muted text-sm">
-              {constraint.metric === 'show_rate' && (() => {
-                const sr = Number(answers.show_rate ?? 0);
-                const bc = Number(answers.booked_calls ?? 0);
-                const cr = Number(answers.close_rate ?? 0);
-                const aov = Number(answers.aov ?? 0);
-                const impact = Math.round((0.8 - sr / 100) * bc * cr / 100 * aov);
-                return `Improving your show rate from ${sr}% to 80% would add $${impact.toLocaleString()}/month.`;
-              })()}
-              {constraint.metric === 'close_rate' && (() => {
-                const sr = Number(answers.show_rate ?? 0);
-                const bc = Number(answers.booked_calls ?? 0);
-                const cr = Number(answers.close_rate ?? 0);
-                const aov = Number(answers.aov ?? 0);
-                const impact = Math.round(bc * sr / 100 * (0.3 - cr / 100) * aov);
-                return `Improving your close rate from ${cr}% to 30% would add $${impact.toLocaleString()}/month.`;
-              })()}
-              {constraint.metric === 'volume' && (() => {
-                const sr = Number(answers.show_rate ?? 0);
-                const bc = Number(answers.booked_calls ?? 0);
-                const cr = Number(answers.close_rate ?? 0);
-                const aov = Number(answers.aov ?? 0);
-                const impact = Math.round(bc * sr / 100 * cr / 100 * aov);
-                return `Doubling your booking volume from ${bc} to ${bc * 2} would add $${impact.toLocaleString()}/month.`;
-              })()}
-            </p>
-          </div>
-        </div>
+        {/* Constraint analysis */}
+        <ConstraintSection constraint={constraint} answers={answers} />
+
+        {/* Target analysis */}
+        {target && <TargetSection target={target} />}
+
+        {/* Interactive simulator */}
+        <Simulator initialAnswers={answers} onRecalculate={handleSimulatorRecalc} />
 
         {/* Bottom CTA */}
         <div className="text-center">
@@ -179,110 +175,10 @@ export default function ReportPage() {
             href="/"
             className="text-text-muted text-sm hover:text-text transition-colors"
           >
-            ← Back to start
+            &larr; Back to start
           </Link>
         </div>
       </div>
     </main>
-  );
-}
-
-function ScenarioCard({
-  label,
-  value,
-  subtitle,
-  active = false,
-  highlight = false,
-}: {
-  label: string;
-  value: number;
-  subtitle: string;
-  active?: boolean;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`text-center p-4 rounded-lg border transition-all ${
-        highlight
-          ? 'bg-brand/5 border-brand'
-          : active
-          ? 'bg-surface border-text-muted'
-          : 'bg-surface border-border'
-      }`}
-    >
-      <div className="text-text-muted text-xs uppercase tracking-wider mb-2">{label}</div>
-      <div className={`font-display text-2xl ${highlight ? 'text-brand' : 'text-text'}`}>
-        ${Math.round(value).toLocaleString()}
-      </div>
-      <div className="text-text-muted text-xs mt-1">{subtitle}</div>
-    </div>
-  );
-}
-
-function RoadmapItem({
-  current,
-  target,
-  label,
-  description,
-}: {
-  current: number;
-  target: number;
-  label: string;
-  description: string;
-}) {
-  const progress = Math.min((current / target) * 100, 100);
-
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-2">
-        <div>
-          <span className="text-text font-medium">{label}</span>
-          <span className="text-text-muted text-sm ml-2">{description}</span>
-        </div>
-        <span className="text-text text-sm">
-          {current}% → {target}%
-        </span>
-      </div>
-      <div className="h-2 bg-background rounded-full overflow-hidden">
-        <div
-          className="h-full bg-brand rounded-full transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function VolumeItem({
-  current,
-  target,
-  label,
-  description,
-}: {
-  current: number;
-  target: number;
-  label: string;
-  description: string;
-}) {
-  const progress = Math.min((current / target) * 100, 100);
-
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-2">
-        <div>
-          <span className="text-text font-medium">{label}</span>
-          <span className="text-text-muted text-sm ml-2">{description}</span>
-        </div>
-        <span className="text-text text-sm">
-          {current} → {target} calls
-        </span>
-      </div>
-      <div className="h-2 bg-background rounded-full overflow-hidden">
-        <div
-          className="h-full bg-brand rounded-full transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>
   );
 }

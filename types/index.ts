@@ -55,6 +55,8 @@ export interface RevenueBreakdown {
   projected_revenue: number;
 }
 
+export type RevenueResult = RevenueBreakdown;
+
 export interface Scenario {
   name: 'current' | 'conservative' | 'expected' | 'aggressive';
   label: string;

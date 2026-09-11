@@ -4,18 +4,20 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/hooks/useSession';
 import { useAnswers } from '@/lib/hooks/useAnswers';
-import { calculateRevenue, calculatePrimaryConstraint, calculateScenarios, type RevenueResult, type ConstraintResult } from '@/lib/calculations/revenue';
-import { calculateQualification, getTierLabel, getTierColor, type QualificationResult } from '@/lib/calculations/qualification';
+import { calculateRevenue, calculatePrimaryConstraint, calculateScenarios, calculateTargetAnalysis } from '@/lib/calculations/revenue';
+import { calculateQualification, getTierLabel, getTierColor } from '@/lib/calculations/qualification';
 import { analytics } from '@/lib/analytics';
 import Link from 'next/link';
+import type { RevenueResult, Scenario, ConstraintAnalysis, TargetAnalysis, QualificationResult } from '@/types';
 
 export default function QuickResultsPage() {
   const router = useRouter();
   const { session, loading: sessionLoading } = useSession();
   const { answers, saving: answersLoading } = useAnswers(session?.id ?? null);
   const [result, setResult] = useState<RevenueResult | null>(null);
-  const [constraint, setConstraint] = useState<ConstraintResult | null>(null);
-  const [scenarios, setScenarios] = useState<ReturnType<typeof calculateScenarios> | null>(null);
+  const [constraint, setConstraint] = useState<ConstraintAnalysis | null>(null);
+  const [scenarios, setScenarios] = useState<Scenario[] | null>(null);
+  const [target, setTarget] = useState<TargetAnalysis | null>(null);
   const [qualification, setQualification] = useState<QualificationResult | null>(null);
 
   useEffect(() => {
@@ -23,12 +25,14 @@ export default function QuickResultsPage() {
       const rev = calculateRevenue(answers);
       const con = calculatePrimaryConstraint(answers);
       const scen = calculateScenarios(answers);
+      const tgt = calculateTargetAnalysis(answers);
       const qual = calculateQualification(answers);
       setResult(rev);
       setConstraint(con);
       setScenarios(scen);
+      setTarget(tgt);
       setQualification(qual);
-      analytics.resultsViewed('quick', scen.current);
+      analytics.resultsViewed('quick', scen[0]?.projected_revenue ?? 0);
     }
   }, [answers]);
 
@@ -54,6 +58,8 @@ export default function QuickResultsPage() {
     );
   }
 
+  const currentScenario = scenarios[0];
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 py-20">
       <div className="max-w-2xl w-full mx-auto">
@@ -61,7 +67,7 @@ export default function QuickResultsPage() {
         <div className="text-center mb-16">
           <span className="text-brand text-sm font-medium tracking-wider uppercase">Your Sales Engine</span>
           <h1 className="font-display text-4xl md:text-5xl text-text mt-4 mb-6">
-            ${Math.round(scenarios.current).toLocaleString()}
+            ${Math.round(currentScenario.projected_revenue).toLocaleString()}
             <span className="text-text-secondary text-2xl block mt-2">current monthly revenue</span>
           </h1>
         </div>
@@ -76,7 +82,7 @@ export default function QuickResultsPage() {
             <span className={`text-sm font-medium ${getTierColor(qualification.tier)}`}>
               {getTierLabel(qualification.tier)}
             </span>
-            <span className="text-text-muted text-xs">•</span>
+            <span className="text-text-muted text-xs">&bull;</span>
             <span className="text-text-secondary text-sm">Score: {qualification.score}/100</span>
           </div>
         </div>
@@ -85,19 +91,37 @@ export default function QuickResultsPage() {
         <div className="bg-surface border border-border rounded-xl p-8 mb-8">
           <h2 className="text-text font-medium text-lg mb-6">Your Current Funnel</h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-            <FunnelMetric label="Booked" value={String(answers.booked_calls ?? '—')} />
-            <FunnelMetric label="Show Rate" value={answers.show_rate ? `${answers.show_rate}%` : '—'} />
-            <FunnelMetric label="Close Rate" value={answers.close_rate ? `${answers.close_rate}%` : '—'} />
-            <FunnelMetric label="AOV" value={answers.aov ? `$${Number(answers.aov).toLocaleString()}` : '—'} />
-            <FunnelMetric label="Revenue" value={answers.monthly_revenue ? `$${Number(answers.monthly_revenue).toLocaleString()}` : '—'} highlight />
+            <div className="text-center">
+              <div className="text-lg font-medium text-text">{String(answers.booked_calls ?? '—')}</div>
+              <div className="text-text-muted text-xs mt-1">Booked</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-medium text-text">{result.show_rate > 0 ? `${result.show_rate.toFixed(0)}%` : '—'}</div>
+              <div className="text-text-muted text-xs mt-1">Show Rate</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-medium text-text">{result.close_rate > 0 ? `${result.close_rate.toFixed(0)}%` : '—'}</div>
+              <div className="text-text-muted text-xs mt-1">Close Rate</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-medium text-text">{answers.aov ? `$${Number(answers.aov).toLocaleString()}` : '—'}</div>
+              <div className="text-text-muted text-xs mt-1">AOV</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-medium text-brand">{answers.monthly_revenue ? `$${Number(answers.monthly_revenue).toLocaleString()}` : '—'}</div>
+              <div className="text-text-muted text-xs mt-1">Revenue</div>
+            </div>
           </div>
         </div>
 
         {/* Primary constraint */}
         <div className="bg-surface border border-brand/20 rounded-xl p-8 mb-8">
           <h2 className="text-text font-medium text-lg mb-2">Primary Constraint</h2>
-          <p className="text-brand text-2xl font-display mb-2">{constraint.label}</p>
-          <p className="text-text-secondary text-sm">{constraint.description}</p>
+          <p className="text-brand text-2xl font-display mb-2">
+            {constraint.primary.metric === 'show_rate' ? 'Show Rate' :
+             constraint.primary.metric === 'close_rate' ? 'Close Rate' : 'Booking Volume'}
+          </p>
+          <p className="text-text-secondary text-sm">{constraint.primary.impact}</p>
         </div>
 
         {/* Lead gate */}
@@ -116,14 +140,5 @@ export default function QuickResultsPage() {
         </div>
       </div>
     </main>
-  );
-}
-
-function FunnelMetric({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="text-center">
-      <div className={`text-lg font-medium ${highlight ? 'text-brand' : 'text-text'}`}>{value}</div>
-      <div className="text-text-muted text-xs mt-1">{label}</div>
-    </div>
   );
 }

@@ -1,17 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/hooks/useSession';
+import { useAnswers } from '@/lib/hooks/useAnswers';
+import { calculateQualification } from '@/lib/calculations/qualification';
+import { analytics } from '@/lib/analytics';
 
 export default function DeepUnlockPage() {
   const router = useRouter();
   const { session } = useSession();
+  const { answers } = useAnswers(session?.id ?? null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [qualification, setQualification] = useState<ReturnType<typeof calculateQualification> | null>(null);
+
+  useEffect(() => {
+    if (Object.keys(answers).length > 0) {
+      const qual = calculateQualification(answers);
+      setQualification(qual);
+    }
+  }, [answers]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +49,8 @@ export default function DeepUnlockPage() {
           session_id: session?.id,
           name: name.trim(),
           email: email.trim().toLowerCase(),
+          qualification_score: qualification?.score ?? null,
+          qualification_tier: qualification?.tier ?? null,
         }),
       });
 
@@ -46,13 +60,16 @@ export default function DeepUnlockPage() {
         throw new Error(data.error || 'Failed to save your information');
       }
 
+      analytics.leadSubmitted('deep');
       setSuccess(true);
 
       setTimeout(() => {
         router.push('/scan/deep/report');
       }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const errorMsg = err instanceof Error ? err.message : 'Something went wrong';
+      analytics.leadSubmissionFailed('deep', errorMsg);
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

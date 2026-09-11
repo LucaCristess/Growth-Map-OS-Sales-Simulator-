@@ -109,7 +109,7 @@ export default function ScanPage() {
               Deep Scan
             </div>
             <h2 className="font-display text-2xl text-text mb-3">
-              10 questions
+              11 questions
             </h2>
             <p className="text-text-secondary text-sm mb-6">
               Raw counts, leads/month, team size, niche, years in business.

@@ -1,4 +1,4 @@
-import type { AnswerValue } from '@/types';
+import type { AnswerValue, Scenario, ConstraintAnalysis, Constraint, ConstraintScore, TargetAnalysis, TargetPath } from '@/types';
 
 export interface RevenueResult {
   projected_revenue: number;
@@ -9,93 +9,244 @@ export interface RevenueResult {
   aov: number;
 }
 
-export interface ConstraintResult {
-  metric: string;
-  label: string;
-  description: string;
-  score: number;
-}
-
 const BENCHMARKS = {
   show_rate: 80,
   close_rate: 30,
-  booking_rate: 100, // booked calls are already qualified
 };
+
+function deriveRates(answers: Record<string, AnswerValue>): { showRate: number; closeRate: number } {
+  // Deep scan provides raw counts; derive percentages if percentages are missing
+  const showRate = Number(answers.show_rate) || 0;
+  const closeRate = Number(answers.close_rate) || 0;
+
+  if (showRate > 0 && closeRate > 0) {
+    return { showRate, closeRate };
+  }
+
+  const booked = Number(answers.booked_calls) || 0;
+  const showCount = Number(answers.show_count) || 0;
+  const closeCount = Number(answers.close_count) || 0;
+
+  return {
+    showRate: showRate > 0 ? showRate : (booked > 0 ? (showCount / booked) * 100 : 0),
+    closeRate: closeRate > 0 ? closeRate : (showCount > 0 ? (closeCount / showCount) * 100 : 0),
+  };
+}
 
 export function calculateRevenue(answers: Record<string, AnswerValue>): RevenueResult {
   const booked = Number(answers.booked_calls) || 0;
-  const showRate = (Number(answers.show_rate) || 0) / 100;
-  const closeRate = (Number(answers.close_rate) || 0) / 100;
+  const { showRate, closeRate } = deriveRates(answers);
   const aov = Number(answers.aov) || 0;
 
   const qualifiedLeads = booked;
-  const projectedRevenue = qualifiedLeads * showRate * closeRate * aov;
+  const projectedRevenue = qualifiedLeads * (showRate / 100) * (closeRate / 100) * aov;
 
   return {
     projected_revenue: projectedRevenue,
     qualified_leads: qualifiedLeads,
-    booking_rate: 1, // Already booked
-    show_rate: showRate * 100,
-    close_rate: closeRate * 100,
+    booking_rate: 1,
+    show_rate: showRate,
+    close_rate: closeRate,
     aov,
   };
 }
 
-export function calculatePrimaryConstraint(answers: Record<string, AnswerValue>): ConstraintResult | null {
-  const showRate = Number(answers.show_rate) || 0;
-  const closeRate = Number(answers.close_rate) || 0;
+export function calculatePrimaryConstraint(answers: Record<string, AnswerValue>): { primary: Constraint; secondary: Constraint | null; scores: ConstraintScore[] } | null {
+  const { showRate, closeRate } = deriveRates(answers);
   const booked = Number(answers.booked_calls) || 0;
 
-  // Calculate gap from benchmark for each metric
   const showGap = BENCHMARKS.show_rate - showRate;
   const closeGap = BENCHMARKS.close_rate - closeRate;
-
-  // Volume constraint
   const volumeScore = booked < 20 ? 20 - booked : 0;
 
-  // Rank constraints
-  const constraints: ConstraintResult[] = [
-    {
-      metric: 'show_rate',
-      label: 'Show Rate',
-      description: `${showGap > 0 ? `${showGap.toFixed(0)}% below` : `${(-showGap).toFixed(0)}% above`} the recommended ${BENCHMARKS.show_rate}% target. ${showGap > 0 ? 'Improving this adds revenue from calls you\'re already booking.' : 'Your show rate is strong.'}`,
-      score: showGap,
-    },
-    {
-      metric: 'close_rate',
-      label: 'Close Rate',
-      description: `${closeGap > 0 ? `${closeGap.toFixed(0)}% below` : `${(-closeGap).toFixed(0)}% above`} the recommended ${BENCHMARKS.close_rate}% target. ${closeGap > 0 ? 'This is your conversion bottleneck.' : 'Your close rate is strong.'}`,
-      score: closeGap,
-    },
-    {
-      metric: 'volume',
-      label: 'Booking Volume',
-      description: `${booked < 20 ? 'Low call volume limits your revenue ceiling.' : 'Your booking volume is healthy.'}`,
-      score: volumeScore,
-    },
+  const scores: ConstraintScore[] = [
+    { metric: 'show_rate', score: Math.max(showGap, 0), rank: 0 },
+    { metric: 'close_rate', score: Math.max(closeGap, 0), rank: 0 },
+    { metric: 'volume', score: volumeScore, rank: 0 },
   ];
 
-  // Sort by score (highest = biggest constraint)
-  constraints.sort((a, b) => b.score - a.score);
+  scores.sort((a, b) => b.score - a.score);
+  scores.forEach((s, i) => { s.rank = i + 1; });
 
-  // Return the top constraint with positive score
-  const primary = constraints.find(c => c.score > 0) ?? constraints[0];
+  const toConstraint = (s: ConstraintScore): Constraint => {
+    const current = s.metric === 'show_rate' ? showRate : s.metric === 'close_rate' ? closeRate : booked;
+    const benchmark = s.metric === 'show_rate' ? BENCHMARKS.show_rate : s.metric === 'close_rate' ? BENCHMARKS.close_rate : 20;
 
-  return primary;
+    const labels: Record<string, string> = {
+      show_rate: 'Show Rate',
+      close_rate: 'Close Rate',
+      volume: 'Booking Volume',
+    };
+
+    const impacts: Record<string, string> = {
+      show_rate: `${Math.abs(showGap).toFixed(0)}% ${showGap > 0 ? 'below' : 'above'} the ${BENCHMARKS.show_rate}% target`,
+      close_rate: `${Math.abs(closeGap).toFixed(0)}% ${closeGap > 0 ? 'below' : 'above'} the ${BENCHMARKS.close_rate}% target`,
+      volume: booked < 20 ? 'Low call volume limits revenue ceiling' : 'Booking volume is healthy',
+    };
+
+    return {
+      metric: s.metric,
+      current_value: current,
+      benchmark_value: benchmark,
+      score: s.score,
+      impact: impacts[s.metric],
+    };
+  };
+
+  const primary = toConstraint(scores[0]);
+  const secondary = scores[1].score > 0 ? toConstraint(scores[1]) : null;
+
+  return { primary, secondary, scores };
 }
 
-export function calculateScenarios(answers: Record<string, AnswerValue>) {
+export function calculateScenarios(answers: Record<string, AnswerValue>): Scenario[] {
   const booked = Number(answers.booked_calls) || 0;
-  const showRate = Number(answers.show_rate) || 0;
-  const closeRate = Number(answers.close_rate) || 0;
+  const { showRate, closeRate } = deriveRates(answers);
   const aov = Number(answers.aov) || 0;
 
   const base = booked * (showRate / 100) * (closeRate / 100) * aov;
 
+  const scenarios: Scenario[] = [
+    {
+      name: 'current',
+      label: 'Current',
+      qualified_leads: booked,
+      booking_rate: 1,
+      show_rate: showRate,
+      close_rate: closeRate,
+      aov,
+      projected_revenue: base,
+      revenue_change: 0,
+    },
+    {
+      name: 'conservative',
+      label: 'Conservative',
+      qualified_leads: Math.round(booked * 0.80),
+      booking_rate: 1,
+      show_rate: showRate,
+      close_rate: Math.min(closeRate + 5, 100),
+      aov,
+      projected_revenue: booked * 0.80 * (showRate / 100) * ((closeRate + 5) / 100) * aov,
+      revenue_change: 0,
+    },
+    {
+      name: 'expected',
+      label: 'Expected',
+      qualified_leads: Math.round(booked * 1.1),
+      booking_rate: 1,
+      show_rate: Math.min(showRate + 10, 100),
+      close_rate: Math.min(closeRate + 5, 100),
+      aov: aov * 1.05,
+      projected_revenue: booked * 1.1 * ((showRate + 10) / 100) * ((closeRate + 5) / 100) * (aov * 1.05),
+      revenue_change: 0,
+    },
+    {
+      name: 'aggressive',
+      label: 'Aggressive',
+      qualified_leads: Math.round(booked * 1.3),
+      booking_rate: 1,
+      show_rate: Math.min(showRate + 15, 100),
+      close_rate: Math.min(closeRate + 10, 100),
+      aov: aov * 1.1,
+      projected_revenue: booked * 1.3 * ((showRate + 15) / 100) * ((closeRate + 10) / 100) * (aov * 1.1),
+      revenue_change: 0,
+    },
+  ];
+
+  // Set revenue_change as percentage from current
+  const currentRev = scenarios[0].projected_revenue;
+  scenarios.forEach((s) => {
+    s.revenue_change = currentRev > 0 ? ((s.projected_revenue - currentRev) / currentRev) * 100 : 0;
+  });
+
+  return scenarios;
+}
+
+export function calculateTargetAnalysis(answers: Record<string, AnswerValue>): TargetAnalysis | null {
+  const targetRevenue = Number(answers.revenue_target) || 0;
+  if (targetRevenue <= 0) return null;
+
+  const booked = Number(answers.booked_calls) || 0;
+  const { showRate, closeRate } = deriveRates(answers);
+  const aov = Number(answers.aov) || 0;
+  const currentRevenue = booked * (showRate / 100) * (closeRate / 100) * aov;
+
+  if (currentRevenue >= targetRevenue) {
+    return {
+      target_revenue: targetRevenue,
+      paths: [],
+      recommended_path: {
+        name: 'balanced',
+        label: 'Already at target',
+        qualified_leads: booked,
+        booking_rate: 1,
+        show_rate: showRate,
+        close_rate: closeRate,
+        aov,
+        projected_revenue: currentRevenue,
+      },
+    };
+  }
+
+  const gap = targetRevenue - currentRevenue;
+
+  // Path 1: Volume Only — keep rates, increase calls
+  const volumeNeeded = aov > 0 && showRate > 0 && closeRate > 0
+    ? Math.ceil(targetRevenue / (aov * (showRate / 100) * (closeRate / 100)))
+    : booked * 3;
+  const volumeOnly: TargetPath = {
+    name: 'volume_only',
+    label: 'Volume Only',
+    qualified_leads: volumeNeeded,
+    booking_rate: 1,
+    show_rate: showRate,
+    close_rate: closeRate,
+    aov,
+    projected_revenue: volumeNeeded * (showRate / 100) * (closeRate / 100) * aov,
+  };
+
+  // Path 2: Conversion First — improve show + close rates, keep volume
+  const neededCloseRate = booked > 0 && showRate > 0 && aov > 0
+    ? Math.min((targetRevenue / (booked * (showRate / 100) * aov)) * 100, 100)
+    : Math.min(closeRate + 20, 100);
+  const conversionFirst: TargetPath = {
+    name: 'conversion_first',
+    label: 'Conversion First',
+    qualified_leads: booked,
+    booking_rate: 1,
+    show_rate: Math.min(showRate + 10, 100),
+    close_rate: Math.min(neededCloseRate, 100),
+    aov,
+    projected_revenue: booked * (Math.min(showRate + 10, 100) / 100) * (Math.min(neededCloseRate, 100) / 100) * aov,
+  };
+
+  // Path 3: Balanced — split the gap across volume + conversion + AOV
+  const balancedBooked = Math.round(booked * 1.2);
+  const balancedShow = Math.min(showRate + 5, 100);
+  const balancedClose = Math.min(closeRate + 5, 100);
+  const balancedAov = aov * 1.05;
+  const balanced: TargetPath = {
+    name: 'balanced',
+    label: 'Balanced',
+    qualified_leads: balancedBooked,
+    booking_rate: 1,
+    show_rate: balancedShow,
+    close_rate: balancedClose,
+    aov: balancedAov,
+    projected_revenue: balancedBooked * (balancedShow / 100) * (balancedClose / 100) * balancedAov,
+  };
+
+  // Recommended: whichever path reaches target with fewest total changes
+  const paths = [volumeOnly, conversionFirst, balanced];
+  const recommended = paths.reduce((best, p) => {
+    const bestGap = Math.abs(best.projected_revenue - targetRevenue);
+    const pGap = Math.abs(p.projected_revenue - targetRevenue);
+    return pGap < bestGap ? p : best;
+  });
+
   return {
-    current: base,
-    conservative: booked * 0.80 * (showRate / 100) * ((closeRate + 5) / 100) * aov,
-    expected: booked * 1.1 * ((showRate + 10) / 100) * ((closeRate + 5) / 100) * (aov * 1.05),
-    aggressive: booked * 1.3 * ((showRate + 15) / 100) * ((closeRate + 10) / 100) * (aov * 1.1),
+    target_revenue: targetRevenue,
+    paths,
+    recommended_path: recommended,
   };
 }
