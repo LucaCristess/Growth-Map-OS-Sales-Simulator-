@@ -40,6 +40,11 @@ export default function UnlockPage() {
       return;
     }
 
+    if (!phone.trim()) {
+      setError('Please enter your phone number');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -50,7 +55,7 @@ export default function UnlockPage() {
           session_id: session?.id,
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          phone: phone.trim() || undefined,
+          phone: phone.trim(),
           qualification_score: qualification?.score ?? null,
           qualification_tier: qualification?.tier ?? null,
         }),
@@ -129,7 +134,7 @@ export default function UnlockPage() {
 
           <div className="mb-6">
             <label htmlFor="phone" className="block text-text text-sm font-medium mb-2">
-              Phone <span className="text-text-muted">(optional)</span>
+              Phone number
             </label>
             <input
               id="phone"

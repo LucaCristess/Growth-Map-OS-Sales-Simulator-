@@ -36,9 +36,9 @@ export function WizardQuestion({
   loading = false,
 }: WizardQuestionProps) {
   const [inputValue, setInputValue] = useState('');
+  const [showRangeFallback, setShowRangeFallback] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync input value when question changes or value changes externally
   useEffect(() => {
     if (value !== null && value !== undefined) {
       if (question.type === 'currency') {
@@ -51,7 +51,6 @@ export function WizardQuestion({
     }
   }, [question.key, question.type, value]);
 
-  // Auto-focus input on desktop
   useEffect(() => {
     if (question.type !== 'select' && inputRef.current) {
       inputRef.current.focus();
@@ -90,9 +89,18 @@ export function WizardQuestion({
     setTimeout(() => onNext(), 150);
   };
 
+  const handleRangeOption = (rangeValue: number) => {
+    onChange(rangeValue);
+    setTimeout(() => onNext(), 150);
+  };
+
   const handleUnknown = () => {
-    onChange(null);
-    onNext();
+    if (question.range_options && question.range_options.length > 0) {
+      setShowRangeFallback(true);
+    } else {
+      onChange(null);
+      onNext();
+    }
   };
 
   const hasValue = value !== null && value !== undefined && value !== '';
@@ -106,23 +114,46 @@ export function WizardQuestion({
 
   return (
     <div className="text-center">
-      {/* Section title */}
       <h2 className="text-text-muted text-sm font-medium tracking-wider uppercase mb-3">
         {sectionTitle}
       </h2>
 
-      {/* Question */}
       <h1 className="font-display text-3xl md:text-4xl text-text mb-3 leading-tight">
         {question.label}
       </h1>
 
-      {/* Description */}
       <p className="text-text-secondary text-base mb-10 max-w-md mx-auto">
         {sectionDescription}
       </p>
 
-      {/* Input area */}
-      {question.type === 'select' ? (
+      {showRangeFallback ? (
+        <div className="max-w-sm mx-auto">
+          <p className="text-text-muted text-sm mb-4">Pick the closest range:</p>
+          <div className="flex flex-col gap-3">
+            {question.range_options?.map((range) => (
+              <button
+                key={range.value}
+                type="button"
+                onClick={() => handleRangeOption(range.value)}
+                className="w-full px-6 py-4 rounded-lg border bg-surface border-border text-text hover:border-text-muted transition-all duration-150"
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowRangeFallback(false);
+              onChange(null);
+              onNext();
+            }}
+            className="mt-4 text-text-muted text-sm hover:text-text transition-colors block w-full text-center"
+          >
+            Skip — I truly don&apos;t know
+          </button>
+        </div>
+      ) : question.type === 'select' ? (
         <div className="flex flex-col gap-3 max-w-sm mx-auto">
           {question.options?.map((option) => (
             <button
@@ -142,7 +173,6 @@ export function WizardQuestion({
       ) : (
         <form onSubmit={handleSubmit} className="max-w-sm mx-auto">
           <div className="relative">
-            {/* Prefix */}
             {question.prefix && (
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted text-lg">
                 {question.prefix}
@@ -161,7 +191,6 @@ export function WizardQuestion({
               }`}
             />
 
-            {/* Suffix */}
             {question.suffix && (
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted text-lg">
                 {question.suffix}
@@ -169,7 +198,6 @@ export function WizardQuestion({
             )}
           </div>
 
-          {/* Next button */}
           <button
             type="submit"
             disabled={!hasValue || loading}
@@ -178,7 +206,6 @@ export function WizardQuestion({
             {loading ? 'Saving...' : isLast ? 'See Results' : 'Next'}
           </button>
 
-          {/* Unknown link */}
           {question.unknown_option && (
             <button
               type="button"
@@ -191,7 +218,6 @@ export function WizardQuestion({
         </form>
       )}
 
-      {/* Help text */}
       {question.help_text && (
         <p className="text-text-muted text-xs mt-6 max-w-sm mx-auto">
           {question.help_text}

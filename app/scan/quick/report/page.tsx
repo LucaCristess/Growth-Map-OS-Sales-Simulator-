@@ -3,13 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSession } from '@/lib/hooks/useSession';
 import { useAnswers } from '@/lib/hooks/useAnswers';
-import { calculateRevenue, calculatePrimaryConstraint, calculateScenarios, calculateTargetAnalysis } from '@/lib/calculations/revenue';
-import { calculateQualification } from '@/lib/calculations/qualification';
+import { calculateRevenue, calculatePrimaryConstraint, calculateScenarios, calculateTargetAnalysis, calculateRevenueCrossCheck, calculateHealthScore } from '@/lib/calculations/revenue';
 import { analytics } from '@/lib/analytics';
 import { ScenarioCard, RoadmapItem, ConstraintSection, TargetSection } from '@/components/report';
 import { Simulator } from '@/components/report/Simulator';
 import Link from 'next/link';
-import type { RevenueResult, Scenario, ConstraintAnalysis, TargetAnalysis, QualificationResult, AnswerValue } from '@/types';
+import type { RevenueResult, Scenario, ConstraintAnalysis, TargetAnalysis, AnswerValue } from '@/types';
 
 export default function ReportPage() {
   const { session, loading: sessionLoading } = useSession();
@@ -18,7 +17,8 @@ export default function ReportPage() {
   const [constraint, setConstraint] = useState<ConstraintAnalysis | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[] | null>(null);
   const [target, setTarget] = useState<TargetAnalysis | null>(null);
-  const [qualification, setQualification] = useState<QualificationResult | null>(null);
+  const [crossCheck, setCrossCheck] = useState<ReturnType<typeof calculateRevenueCrossCheck> | null>(null);
+  const [health, setHealth] = useState<ReturnType<typeof calculateHealthScore> | null>(null);
   const [reportSaved, setReportSaved] = useState(false);
 
   const compute = useCallback((ans: Record<string, AnswerValue>) => {
@@ -26,13 +26,15 @@ export default function ReportPage() {
     const con = calculatePrimaryConstraint(ans);
     const scen = calculateScenarios(ans);
     const tgt = calculateTargetAnalysis(ans);
-    const qual = calculateQualification(ans);
+    const cc = calculateRevenueCrossCheck(ans);
+    const hs = calculateHealthScore(ans);
     setResult(rev);
     setConstraint(con);
     setScenarios(scen);
     setTarget(tgt);
-    setQualification(qual);
-    return { rev, con, scen, tgt, qual };
+    setCrossCheck(cc);
+    setHealth(hs);
+    return { rev, con, scen, tgt, cc, hs };
   }, []);
 
   useEffect(() => {
@@ -40,7 +42,6 @@ export default function ReportPage() {
       const computed = compute(answers);
       analytics.reportViewed('quick', Number(answers.monthly_revenue) || 0, Number(answers.revenue_target) || 0);
 
-      // Persist report to database
       if (session?.id && !reportSaved) {
         setReportSaved(true);
         const reportData = {
@@ -48,7 +49,6 @@ export default function ReportPage() {
           scenarios: computed.scen,
           constraint: computed.con,
           target: computed.tgt,
-          qualification: computed.qual,
         };
         fetch('/api/reports', {
           method: 'POST',
@@ -71,16 +71,13 @@ export default function ReportPage() {
     );
   }
 
-  if (!result || !constraint || !scenarios) {
+  if (!result || !constraint || !scenarios || !health) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center px-6">
         <div className="text-center max-w-md">
           <h1 className="font-display text-3xl text-text mb-4">No data yet</h1>
           <p className="text-text-secondary mb-8">Complete the scan to see your report.</p>
-          <Link
-            href="/scan"
-            className="bg-brand hover:bg-brand-hover text-background font-medium px-6 py-3 rounded-lg transition-all duration-200"
-          >
+          <Link href="/scan" className="bg-brand hover:bg-brand-hover text-background font-medium px-6 py-3 rounded-lg transition-all duration-200">
             Start Scan
           </Link>
         </div>
@@ -89,29 +86,34 @@ export default function ReportPage() {
   }
 
   const currentScenario = scenarios[0];
-  const expectedScenario = scenarios.find((s) => s.name === 'expected');
-  const revenueGrowth = currentScenario.projected_revenue > 0 && expectedScenario
-    ? ((expectedScenario.projected_revenue - currentScenario.projected_revenue) / currentScenario.projected_revenue * 100).toFixed(0)
-    : 'N/A';
 
   return (
     <main className="min-h-screen px-6 py-20">
       <div className="max-w-3xl mx-auto">
-        {/* Header */}
+        {/* 1. Headline */}
         <div className="text-center mb-16">
-          <span className="text-brand text-sm font-medium tracking-wider uppercase">
-            Full Report
-          </span>
+          <span className="text-brand text-sm font-medium tracking-wider uppercase">Full Report</span>
           <h1 className="font-display text-4xl md:text-5xl text-text mt-4 mb-4">
             ${Math.round(currentScenario.projected_revenue).toLocaleString()}
             <span className="text-text-secondary text-2xl block mt-2">current monthly revenue</span>
           </h1>
-          <p className="text-text-muted text-sm">
-            Here&apos;s what your business could look like with targeted improvements.
-          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface border border-border mt-2">
+            <span className="text-text-muted text-sm">Health Score:</span>
+            <span className={`font-display text-lg ${health.color}`}>{health.score}/100</span>
+            <span className={`text-xs ${health.color}`}>({health.label})</span>
+          </div>
         </div>
 
-        {/* Scenario comparison */}
+        {/* 2. Constraint analysis */}
+        <ConstraintSection constraint={constraint} answers={answers} />
+
+        {/* 3. Interactive simulator */}
+        <Simulator initialAnswers={answers} onRecalculate={handleSimulatorRecalc} />
+
+        {/* 4. Target analysis */}
+        {target && <TargetSection target={target} />}
+
+        {/* 5. Scenario comparison */}
         <div className="bg-surface border border-border rounded-xl p-8 mb-8">
           <h2 className="text-text font-medium text-lg mb-6">Revenue Scenarios</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -134,7 +136,7 @@ export default function ReportPage() {
           </div>
         </div>
 
-        {/* Improvement roadmap */}
+        {/* 6. Improvement roadmap */}
         <div className="bg-surface border border-border rounded-xl p-8 mb-8">
           <h2 className="text-text font-medium text-lg mb-6">Improvement Roadmap</h2>
           <div className="space-y-6">
@@ -160,31 +162,19 @@ export default function ReportPage() {
           </div>
         </div>
 
-        {/* Constraint analysis */}
-        <ConstraintSection constraint={constraint} answers={answers} />
-
-        {/* Target analysis */}
-        {target && <TargetSection target={target} />}
-
-        {/* Interactive simulator */}
-        <Simulator initialAnswers={answers} onRecalculate={handleSimulatorRecalc} />
-
-        {/* Bottom CTA */}
+        {/* 7. Bottom CTA */}
         <div className="text-center space-y-4">
           <a
             href="https://calendly.com/growthmap/audit"
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => analytics.auditCtaClicked('quick')}
-            className="inline-block bg-brand hover:bg-brand-hover text-background font-medium px-8 py-3 rounded-lg transition-all duration-200"
+            className="inline-block bg-brand hover:bg-brand-hover text-background font-semibold px-10 py-4 rounded-lg text-base transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]"
           >
-            Book a Free Audit
+            Book My Paid Audit
           </a>
           <div>
-            <Link
-              href="/"
-              className="text-text-muted text-sm hover:text-text transition-colors"
-            >
+            <Link href="/" className="text-text-muted text-sm hover:text-text transition-colors">
               &larr; Back to start
             </Link>
           </div>

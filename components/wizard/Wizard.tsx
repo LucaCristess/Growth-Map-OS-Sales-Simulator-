@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { WizardQuestion } from './WizardQuestion';
+import { LiveInputSidebar } from './LiveInputSidebar';
 import { analytics } from '@/lib/analytics';
 import type { QuestionSection, AnswerValue } from '@/types';
 
@@ -63,6 +64,11 @@ export function Wizard({ sections, answers, onAnswer, onComplete, scanType = 'qu
     analytics.wizardQuestionAnswered(currentQuestion.key, value, currentIndex);
   }, [currentQuestion.key, onAnswer, currentIndex]);
 
+  const handleJumpTo = useCallback((index: number) => {
+    setDirection(index > currentIndex ? 'forward' : 'backward');
+    setCurrentIndex(index);
+  }, [currentIndex]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && currentValue !== null && currentValue !== '') {
       handleNext();
@@ -70,49 +76,72 @@ export function Wizard({ sections, answers, onAnswer, onComplete, scanType = 'qu
   }, [currentValue, handleNext]);
 
   return (
-    <div className="min-h-screen flex flex-col" onKeyDown={handleKeyDown}>
-      {/* Back arrow */}
-      <div className="fixed top-6 left-6 z-10">
-        {currentIndex > 0 && (
-          <button
-            onClick={handleBack}
-            className="text-text-muted hover:text-text transition-colors p-2"
-            aria-label="Go back"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        )}
+    <div className="min-h-screen flex" onKeyDown={handleKeyDown}>
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Back arrow */}
+        <div className="fixed top-6 left-6 z-10">
+          {currentIndex > 0 && (
+            <button
+              onClick={handleBack}
+              className="text-text-muted hover:text-text transition-colors p-2"
+              aria-label="Go back"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        <div className="fixed top-0 left-0 right-0 h-0.5 bg-border z-20">
+          <div
+            className="h-full bg-brand transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Question area with slide transition */}
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="max-w-xl w-full">
+            <div
+              key={currentIndex}
+              className={`animate-slide-${direction}`}
+            >
+              <WizardQuestion
+                question={currentQuestion}
+                value={currentValue}
+                onChange={handleAnswer}
+                onNext={handleNext}
+                sectionTitle={currentSection.title}
+                sectionDescription={currentSection.description ?? ''}
+                isLast={isLastQuestion}
+                loading={loading}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="fixed top-0 left-0 right-0 h-0.5 bg-border z-20">
-        <div
-          className="h-full bg-brand transition-all duration-500 ease-out"
-          style={{ width: `${progress}%` }}
+      {/* Live input sidebar — desktop only */}
+      <div className="hidden md:block">
+        <LiveInputSidebar
+          sections={sections}
+          answers={answers}
+          currentIndex={currentIndex}
+          onJumpTo={handleJumpTo}
         />
       </div>
 
-      {/* Question area with slide transition */}
-      <div className="flex-1 flex items-center justify-center px-6">
-        <div className="max-w-xl w-full">
-          <div
-            key={currentIndex}
-            className={`animate-slide-${direction}`}
-          >
-            <WizardQuestion
-              question={currentQuestion}
-              value={currentValue}
-              onChange={handleAnswer}
-              onNext={handleNext}
-              sectionTitle={currentSection.title}
-              sectionDescription={currentSection.description ?? ''}
-              isLast={isLastQuestion}
-              loading={loading}
-            />
-          </div>
-        </div>
+      {/* Mobile sidebar */}
+      <div className="md:hidden">
+        <LiveInputSidebar
+          sections={sections}
+          answers={answers}
+          currentIndex={currentIndex}
+          onJumpTo={handleJumpTo}
+        />
       </div>
 
       <style jsx>{`
@@ -125,10 +154,10 @@ export function Wizard({ sections, answers, onAnswer, onComplete, scanType = 'qu
           to { opacity: 1; transform: translateX(0); }
         }
         .animate-slide-forward {
-          animation: slide-forward 0.3s ease-out;
+          animation: slide-forward 0.25s ease-out;
         }
         .animate-slide-backward {
-          animation: slide-backward 0.3s ease-out;
+          animation: slide-backward 0.25s ease-out;
         }
       `}</style>
     </div>

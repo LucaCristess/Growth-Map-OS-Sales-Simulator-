@@ -25,7 +25,7 @@ export const CreateLeadSchema = z.object({
   session_id: z.string().uuid('Invalid session_id format'),
   name: z.string().min(1, 'Name is required').max(255),
   email: z.string().email('Invalid email format'),
-  phone: z.string().max(50).optional(),
+  phone: z.string().min(1, 'Phone number is required').max(50),
   qualification_score: z.number().int().min(0).max(100).optional(),
   qualification_tier: z.enum(['education', 'future_icp', 'qualified', 'high_priority']).optional(),
 });

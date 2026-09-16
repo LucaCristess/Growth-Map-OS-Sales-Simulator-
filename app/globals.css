@@ -3,20 +3,21 @@
 @tailwind utilities;
 
 :root {
-  --background: #0B0B0C;
-  --surface: #111214;
-  --surface-raised: #17181B;
-  --border: #26272B;
-  --text: #F5F5F3;
-  --text-secondary: #A7A7A4;
-  --text-muted: #717177;
-  --brand: #D8B45A;
+  --background: #0A0A0A;
+  --surface: #1C1C1E;
+  --surface-raised: #2C2C2E;
+  --border: #3A3A3C;
+  --text: #FFFFFF;
+  --text-secondary: #A8A8AC;
+  --text-muted: #717176;
+  --brand: #C9A227;
+  --brand-hover: #A9871C;
 }
 
 body {
   background: var(--background);
   color: var(--text);
-  font-family: var(--font-geist), system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -71,26 +72,40 @@ input[type="range"]::-webkit-slider-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #D8B45A;
+  background: #C9A227;
   cursor: pointer;
-  border: 2px solid #0B0B0C;
-  box-shadow: 0 0 0 2px #D8B45A;
+  border: 2px solid #0A0A0A;
+  box-shadow: 0 0 0 2px #C9A227;
 }
 
 input[type="range"]::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #D8B45A;
+  background: #C9A227;
   cursor: pointer;
-  border: 2px solid #0B0B0C;
-  box-shadow: 0 0 0 2px #D8B45A;
+  border: 2px solid #0A0A0A;
+  box-shadow: 0 0 0 2px #C9A227;
 }
 
 input[type="range"]:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px #D8B45A;
+  box-shadow: 0 0 0 3px #C9A227;
 }
 
 input[type="range"]:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 3px #D8B45A;
+  box-shadow: 0 0 0 3px #C9A227;
+}
+
+/* Topographic background pattern */
+.topo-bg {
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(201, 162, 39, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(201, 162, 39, 0.02) 0%, transparent 50%);
+}
+
+/* Contour line decoration */
+.contour-lines {
+  background-image: url("data:image/svg+xml,%3Csvg width='800' height='600' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 400 Q200 350 400 380 T800 360' fill='none' stroke='%23C9A227' stroke-width='0.5' opacity='0.08'/%3E%3Cpath d='M0 420 Q200 370 400 400 T800 380' fill='none' stroke='%23C9A227' stroke-width='0.5' opacity='0.06'/%3E%3Cpath d='M0 440 Q200 390 400 420 T800 400' fill='none' stroke='%23C9A227' stroke-width='0.5' opacity='0.04'/%3E%3Cpath d='M0 300 Q300 250 500 280 T800 260' fill='none' stroke='%233A3A3C' stroke-width='0.5' opacity='0.1'/%3E%3Cpath d='M0 320 Q300 270 500 300 T800 280' fill='none' stroke='%233A3A3C' stroke-width='0.5' opacity='0.08'/%3E%3Cpath d='M0 200 Q150 180 350 200 T700 180' fill='none' stroke='%233A3A3C' stroke-width='0.5' opacity='0.06'/%3E%3C/svg%3E");
+  background-size: cover;
+  background-position: center;
 }

@@ -126,6 +126,7 @@ export interface Question {
   suffix?: string;
   prefix?: string;
   options?: { label: string; value: string }[];
+  range_options?: { label: string; value: number }[];
   required: boolean;
   help_text?: string;
   min?: number;

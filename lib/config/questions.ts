@@ -8,7 +8,7 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'booked_calls',
-        label: 'Booked calls last month',
+        label: 'How many calls did you book last month?',
         type: 'number',
         required: true,
         help_text: 'Scheduled sales conversations — calls, demos, consultations.',
@@ -25,7 +25,7 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'show_rate',
-        label: 'Show rate',
+        label: 'What percentage of booked calls showed up?',
         type: 'percentage',
         suffix: '%',
         required: true,
@@ -43,7 +43,7 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'close_rate',
-        label: 'Close rate',
+        label: 'What percentage of shown calls became customers?',
         type: 'percentage',
         suffix: '%',
         required: true,
@@ -61,7 +61,7 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'sales_ownership',
-        label: 'Who does sales?',
+        label: 'Who runs your sales calls?',
         type: 'select',
         required: true,
         options: [
@@ -81,7 +81,7 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'monthly_revenue',
-        label: 'Monthly revenue',
+        label: 'What is your current monthly revenue?',
         type: 'currency',
         prefix: '$',
         required: true,
@@ -99,7 +99,7 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'aov',
-        label: 'Average order value',
+        label: 'What is your average order value?',
         type: 'currency',
         prefix: '$',
         required: true,
@@ -107,6 +107,13 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
         min: 0,
         max: 1000000,
         unknown_option: true,
+        range_options: [
+          { label: 'Under $500', value: 250 },
+          { label: '$500 – $2,000', value: 1250 },
+          { label: '$2,000 – $5,000', value: 3500 },
+          { label: '$5,000 – $15,000', value: 10000 },
+          { label: '$15,000+', value: 20000 },
+        ],
       },
     ],
   },
@@ -117,7 +124,7 @@ export const QUICK_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'revenue_target',
-        label: 'Target monthly revenue',
+        label: 'What is your target monthly revenue?',
         type: 'currency',
         prefix: '$',
         required: true,
@@ -139,7 +146,7 @@ export const DEEP_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'show_count',
-        label: 'Calls that showed up',
+        label: 'How many booked calls actually showed up?',
         type: 'number',
         required: true,
         help_text: 'Of the calls you booked, how many attended?',
@@ -156,7 +163,7 @@ export const DEEP_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'close_count',
-        label: 'People who became customers',
+        label: 'How many people who showed up became customers?',
         type: 'number',
         required: true,
         help_text: 'Of the calls that showed, how many bought?',
@@ -174,7 +181,7 @@ export const DEEP_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'monthly_leads',
-        label: 'Leads per month',
+        label: 'How many leads come in monthly?',
         type: 'number',
         required: true,
         help_text: 'New people entering your pipeline each month.',
@@ -191,7 +198,7 @@ export const DEEP_SCAN_SECTIONS: QuestionSection[] = [
     questions: [
       {
         key: 'team_size',
-        label: 'Sales team members',
+        label: 'How many people are on your sales team?',
         type: 'number',
         required: true,
         help_text: 'Include yourself if you do sales.',
@@ -204,11 +211,11 @@ export const DEEP_SCAN_SECTIONS: QuestionSection[] = [
   {
     id: 'niche',
     title: 'Industry',
-    description: 'What industry or niche are you in?',
+    description: 'What industry are you in?',
     questions: [
       {
         key: 'niche',
-        label: 'Your niche',
+        label: 'What industry are you in?',
         type: 'select',
         required: true,
         options: [
@@ -220,23 +227,6 @@ export const DEEP_SCAN_SECTIONS: QuestionSection[] = [
           { label: 'E-commerce', value: 'ecommerce' },
           { label: 'Other', value: 'other' },
         ],
-        unknown_option: true,
-      },
-    ],
-  },
-  {
-    id: 'years_in_business',
-    title: 'Experience',
-    description: 'How long have you been in business?',
-    questions: [
-      {
-        key: 'years_in_business',
-        label: 'Years in business',
-        type: 'number',
-        required: true,
-        help_text: 'Roughly — under 1 year, 1-3, 3-5, 5+?',
-        min: 0,
-        max: 50,
         unknown_option: true,
       },
     ],

@@ -13,7 +13,11 @@ const BENCHMARKS = {
   show_rate: 80,
   close_rate: 30,
   aov: 2000,
-  booking_rate: 1,
+};
+
+const CEILINGS = {
+  show_rate: 85,
+  close_rate: 60,
 };
 
 function deriveRates(answers: Record<string, AnswerValue>): { showRate: number; closeRate: number } {
@@ -34,6 +38,36 @@ function deriveRates(answers: Record<string, AnswerValue>): { showRate: number; 
   };
 }
 
+function clampToCeiling(value: number, ceiling: number): number {
+  return Math.min(value, ceiling);
+}
+
+export function calculateHealthScore(answers: Record<string, AnswerValue>): { score: number; label: string; color: string } {
+  const { showRate, closeRate } = deriveRates(answers);
+  const booked = Number(answers.booked_calls) || 0;
+  const aov = Number(answers.aov) || 0;
+  const monthlyLeads = Number(answers.monthly_leads) || 0;
+
+  // Show rate score (0-25 points): 0% → 0, 80%+ → 25
+  const showScore = Math.min((showRate / BENCHMARKS.show_rate) * 25, 25);
+
+  // Close rate score (0-25 points): 0% → 0, 30%+ → 25
+  const closeScore = Math.min((closeRate / BENCHMARKS.close_rate) * 25, 25);
+
+  // Volume score (0-25 points): 0 booked → 0, 20+ booked → 25
+  const volumeScore = Math.min((booked / 20) * 25, 25);
+
+  // AOV score (0-25 points): $0 → 0, $2000+ → 25
+  const aovScore = aov > 0 ? Math.min((aov / BENCHMARKS.aov) * 25, 25) : 0;
+
+  const raw = Math.round(showScore + closeScore + volumeScore + aovScore);
+  const score = Math.max(0, Math.min(100, raw));
+
+  if (score >= 80) return { score, label: 'Strong', color: 'text-green-400' };
+  if (score >= 50) return { score, label: 'Needs Work', color: 'text-yellow-400' };
+  return { score, label: 'Critical', color: 'text-red-400' };
+}
+
 export function calculateRevenue(answers: Record<string, AnswerValue>): RevenueResult {
   const booked = Number(answers.booked_calls) || 0;
   const { showRate, closeRate } = deriveRates(answers);
@@ -49,6 +83,30 @@ export function calculateRevenue(answers: Record<string, AnswerValue>): RevenueR
     show_rate: showRate,
     close_rate: closeRate,
     aov,
+  };
+}
+
+export function calculateRevenueCrossCheck(answers: Record<string, AnswerValue>): {
+  formula_computed: number;
+  self_reported: number;
+  match: boolean;
+  variance_pct: number;
+} | null {
+  const selfReported = Number(answers.monthly_revenue) || 0;
+  if (selfReported <= 0) return null;
+
+  const result = calculateRevenue(answers);
+  const formulaComputed = result.projected_revenue;
+
+  const variancePct = selfReported > 0
+    ? Math.abs(formulaComputed - selfReported) / selfReported * 100
+    : 0;
+
+  return {
+    formula_computed: formulaComputed,
+    self_reported: selfReported,
+    match: variancePct < 20,
+    variance_pct: variancePct,
   };
 }
 
@@ -85,7 +143,7 @@ export function calculatePrimaryConstraint(answers: Record<string, AnswerValue>)
     const benchmark = s.metric === 'show_rate' ? BENCHMARKS.show_rate
       : s.metric === 'close_rate' ? BENCHMARKS.close_rate
       : s.metric === 'aov' ? BENCHMARKS.aov
-      : s.metric === 'booking_rate' ? BENCHMARKS.booking_rate
+      : s.metric === 'booking_rate' ? 100
       : 20;
 
     const impacts: Record<string, string> = {
@@ -136,9 +194,9 @@ export function calculateScenarios(answers: Record<string, AnswerValue>): Scenar
       qualified_leads: Math.round(booked * 0.80),
       booking_rate: 1,
       show_rate: showRate,
-      close_rate: Math.min(closeRate + 5, 100),
+      close_rate: clampToCeiling(closeRate + 5, CEILINGS.close_rate),
       aov,
-      projected_revenue: booked * 0.80 * (showRate / 100) * ((closeRate + 5) / 100) * aov,
+      projected_revenue: booked * 0.80 * (showRate / 100) * (clampToCeiling(closeRate + 5, CEILINGS.close_rate) / 100) * aov,
       revenue_change: 0,
     },
     {
@@ -146,10 +204,10 @@ export function calculateScenarios(answers: Record<string, AnswerValue>): Scenar
       label: 'Expected',
       qualified_leads: Math.round(booked * 1.1),
       booking_rate: 1,
-      show_rate: Math.min(showRate + 10, 100),
-      close_rate: Math.min(closeRate + 5, 100),
+      show_rate: clampToCeiling(showRate + 10, CEILINGS.show_rate),
+      close_rate: clampToCeiling(closeRate + 5, CEILINGS.close_rate),
       aov: aov * 1.05,
-      projected_revenue: booked * 1.1 * ((showRate + 10) / 100) * ((closeRate + 5) / 100) * (aov * 1.05),
+      projected_revenue: booked * 1.1 * (clampToCeiling(showRate + 10, CEILINGS.show_rate) / 100) * (clampToCeiling(closeRate + 5, CEILINGS.close_rate) / 100) * (aov * 1.05),
       revenue_change: 0,
     },
     {
@@ -157,10 +215,10 @@ export function calculateScenarios(answers: Record<string, AnswerValue>): Scenar
       label: 'Aggressive',
       qualified_leads: Math.round(booked * 1.3),
       booking_rate: 1,
-      show_rate: Math.min(showRate + 15, 100),
-      close_rate: Math.min(closeRate + 10, 100),
+      show_rate: clampToCeiling(showRate + 15, CEILINGS.show_rate),
+      close_rate: clampToCeiling(closeRate + 10, CEILINGS.close_rate),
       aov: aov * 1.1,
-      projected_revenue: booked * 1.3 * ((showRate + 15) / 100) * ((closeRate + 10) / 100) * (aov * 1.1),
+      projected_revenue: booked * 1.3 * (clampToCeiling(showRate + 15, CEILINGS.show_rate) / 100) * (clampToCeiling(closeRate + 10, CEILINGS.close_rate) / 100) * (aov * 1.1),
       revenue_change: 0,
     },
   ];
@@ -214,22 +272,22 @@ export function calculateTargetAnalysis(answers: Record<string, AnswerValue>): T
   };
 
   const neededCloseRate = booked > 0 && showRate > 0 && aov > 0
-    ? Math.min((targetRevenue / (booked * (showRate / 100) * aov)) * 100, 100)
-    : Math.min(closeRate + 20, 100);
+    ? Math.min((targetRevenue / (booked * (showRate / 100) * aov)) * 100, CEILINGS.close_rate)
+    : Math.min(closeRate + 20, CEILINGS.close_rate);
   const conversionFirst: TargetPath = {
     name: 'conversion_first',
     label: 'Conversion First',
     qualified_leads: booked,
     booking_rate: 1,
-    show_rate: Math.min(showRate + 10, 100),
-    close_rate: Math.min(neededCloseRate, 100),
+    show_rate: clampToCeiling(showRate + 10, CEILINGS.show_rate),
+    close_rate: clampToCeiling(neededCloseRate, CEILINGS.close_rate),
     aov,
-    projected_revenue: booked * (Math.min(showRate + 10, 100) / 100) * (Math.min(neededCloseRate, 100) / 100) * aov,
+    projected_revenue: booked * (clampToCeiling(showRate + 10, CEILINGS.show_rate) / 100) * (clampToCeiling(neededCloseRate, CEILINGS.close_rate) / 100) * aov,
   };
 
   const balancedBooked = Math.round(booked * 1.2);
-  const balancedShow = Math.min(showRate + 5, 100);
-  const balancedClose = Math.min(closeRate + 5, 100);
+  const balancedShow = clampToCeiling(showRate + 5, CEILINGS.show_rate);
+  const balancedClose = clampToCeiling(closeRate + 5, CEILINGS.close_rate);
   const balancedAov = aov * 1.05;
   const balanced: TargetPath = {
     name: 'balanced',
